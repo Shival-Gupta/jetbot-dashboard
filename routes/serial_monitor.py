@@ -46,10 +46,17 @@ def arduino_serial_page():
     </head>
     <body class="bg-gray-100 p-8">
         <div class="container mx-auto max-w-3xl bg-white p-6 rounded-lg shadow-md">
-             <div class="flex justify-between items-center mb-4">
-                 <h1 class="text-2xl font-bold text-center text-gray-700 flex-grow">Web Serial Monitor</h1>
-                 <a href="/" class="text-sm text-blue-600 hover:underline">&larr; Back to Dashboard</a>
+            <div class="flex justify-between items-center mb-4">
+                <a href="/" class="text-blue-600 hover:text-blue-700">
+                    &larr; 🏠︎
+                </a>
+                <h1 class="text-2xl font-bold text-center text-gray-700 flex-grow">Web Serial Monitor</h1>
+                <div class="w-6 h-6 invisible">
+                    <!-- Empty invisible element to match the width of the home icon -->
+                </div>
             </div>
+
+
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 items-end">
                 <div>

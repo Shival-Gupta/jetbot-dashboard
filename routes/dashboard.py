@@ -123,7 +123,7 @@ def index():
                     <button id="theme-toggle" 
                             class="py-1 px-3 bg-gray-300 rounded hover:bg-gray-400 
                                    dark:bg-gray-600 dark:hover:bg-gray-500 transition">
-                        <span id="theme-icon">🌙</span> Theme
+                        <span id="theme-icon">🌙</span>
                     </button>
                     <!-- region System Controls -->
                     <div class="flex flex-wrap justify-center gap-3">
@@ -152,6 +152,11 @@ def index():
                     <a href="/arduino-serial" 
                        class="py-2 px-4 bg-green-500 text-white rounded hover:bg-green-600 transition text-sm font-medium">
                         Serial Monitor
+                    </a>
+                    <!-- Add Web Shell -->
+                    <a href="/terminal"
+                    class="py-2 px-4 bg-gray-700 text-white rounded hover:bg-gray-800 transition text-sm font-medium">
+                        Web Shell
                     </a>
                 </div>
             </div>

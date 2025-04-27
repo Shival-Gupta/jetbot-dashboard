@@ -37,9 +37,15 @@ def arduino_upload_page():
     <body class="bg-gray-100 p-8">
         <div class="container mx-auto max-w-2xl bg-white p-6 rounded-lg shadow-md">
             <div class="flex justify-between items-center mb-4">
-                 <h1 class="text-2xl font-bold text-center text-gray-700 flex-grow">Upload Arduino Sketch</h1>
-                 <a href="/" class="text-sm text-blue-600 hover:underline">&larr; Back to Dashboard</a>
+                <a href="/" class="text-blue-600 hover:text-blue-700">
+                    &larr; 🏠︎
+                </a>
+                <h1 class="text-2xl font-bold text-center text-gray-700 flex-grow">Upload Arduino Sketch</h1>
+                <div class="w-6 h-6 invisible">
+                    <!-- Empty invisible element to match the width of the home icon -->
+                </div>
             </div>
+
 
             <form id="uploadForm" class="space-y-4"> {# Removed method/enctype, handled by JS #}
                 <div>
