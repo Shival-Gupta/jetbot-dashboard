@@ -1,10 +1,29 @@
 # routes/dashboard.py
-from flask import Blueprint, render_template_string
+from flask import Blueprint, render_template_string, jsonify
 import socket # Standard library
 import helpers # Local helper module
+import subprocess # Standard library
 
 # Create Blueprint
 dashboard_bp = Blueprint('dashboard', __name__)
+
+@dashboard_bp.route('/api/system/reboot', methods=['POST'])
+def system_reboot():
+    """API endpoint to reboot the system."""
+    try:
+        subprocess.run(['sudo','systemctl','reboot'], check=True)
+        return jsonify({'status': 'success', 'message': 'System is rebooting...'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@dashboard_bp.route('/api/system/poweroff', methods=['POST'])
+def system_poweroff():
+    """API endpoint to power off the system."""
+    try:
+        subprocess.run(['sudo','systemctl','poweroff'], check=True)
+        return jsonify({'status': 'success', 'message': 'System is shutting down...'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @dashboard_bp.route('/')
 def index():
@@ -50,6 +69,10 @@ def index():
             <div class="flex justify-center space-x-4 mb-8">
                  <a href="/arduino-upload" class="py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 transition">Arduino Uploader</a>
                  <a href="/arduino-serial" class="py-2 px-4 bg-green-500 text-white rounded hover:bg-green-600 transition">Serial Monitor</a>
+                 <button onclick="if(confirm('Are you sure you want to reboot the system?')) fetch('/api/system/reboot', {method: 'POST'})" 
+                         class="py-2 px-4 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition">Reboot</button>
+                 <button onclick="if(confirm('Are you sure you want to power off the system?')) fetch('/api/system/poweroff', {method: 'POST'})"
+                         class="py-2 px-4 bg-red-500 text-white rounded hover:bg-red-600 transition">Power Off</button>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

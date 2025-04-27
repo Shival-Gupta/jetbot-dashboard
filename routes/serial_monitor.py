@@ -1,8 +1,8 @@
 # routes/serial_monitor.py
-from flask import Blueprint, render_template_string, current_app, request
+from flask import Blueprint, render_template_string, current_app # Keep current_app for logger use *within context* later
 import serial
 import threading
-import logging # Use Flask's logger configured in main
+# import logging # No longer needed at top level if only using current_app.logger
 
 # Import necessary items from shared modules
 import config
@@ -12,23 +12,22 @@ import helpers
 serial_monitor_bp = Blueprint('serial_monitor', __name__)
 
 # --- Global State & SocketIO Instance Holder ---
-# This dictionary will hold active connections managed by this module
-# Structure: {sid: {'serial': serial_instance, 'thread': read_thread, 'stop_event': stop_event}}
 serial_connections = {}
-socketio_instance = None # Will be set by main.py via init_socketio
+socketio_instance = None
 
 def init_socketio(socketio):
     """Allows main.py to pass the initialized SocketIO instance."""
     global socketio_instance
     socketio_instance = socketio
-    current_app.logger.info("SocketIO instance received by serial_monitor module.")
+    # REMOVED: current_app.logger.info("SocketIO instance received by serial_monitor module.")
+    # Cannot use current_app.logger here as it's outside app context during init.
+    # Logging inside request/event handlers below is okay.
+    print("INFO: SocketIO instance received by serial_monitor module.") # Use basic print during init if needed
 
 # --- Route for the Serial Monitor Page ---
 @serial_monitor_bp.route('/arduino-serial')
 def arduino_serial_page():
     """Serves the Serial Monitor page."""
-     # --- PASTE SERIAL MONITOR HTML TEMPLATE STRING HERE ---
-     # (The template string from arduino_dashboard.py's /arduino-serial route)
     serial_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -42,7 +41,6 @@ def arduino_serial_page():
         <style>
             body { font-family: sans-serif; }
             #serialOutput { height: 400px; background-color: #1a202c; color: #c6f6d5; font-family: monospace; font-size: 0.875rem; overflow-y: scroll; padding: 1rem; border: 1px solid #4a5568; border-radius: 0.375rem; white-space: pre-wrap; word-wrap: break-word; }
-            /* Style for autoscroll checkbox */
             .form-checkbox:checked { background-color: #48bb78; border-color: #48bb78; }
         </style>
     </head>
@@ -107,8 +105,8 @@ def arduino_serial_page():
         </div>
 
         <script>
-            // --- PASTE SERIAL MONITOR JAVASCRIPT HERE ---
-            // (The <script> block from arduino_dashboard.py's /arduino-serial route)
+           // --- PASTE SERIAL MONITOR JAVASCRIPT HERE ---
+            // (The <script> block from the previous version's /arduino-serial route)
             const socket = io(); // Connect to Socket.IO server
 
             // --- DOM Elements ---
@@ -175,7 +173,7 @@ def arduino_serial_page():
                 portSelect.innerHTML = '<option value="" disabled selected>Refreshing...</option>';
 
                 try {
-                    const response = await fetch('/api/ports'); // Use shared API endpoint
+                    const response = await fetch('/api/ports');
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const ports = await response.json();
 
@@ -186,20 +184,19 @@ def arduino_serial_page():
                             option.value = port;
                             option.textContent = port;
                             portSelect.appendChild(option);
-                            if (index === 0) option.selected = true; // Select first found
+                            if (index === 0) option.selected = true;
                         });
-                         portSelect.disabled = false;
+                        portSelect.disabled = isConnected; // Only disable if connected
                     } else {
                         portSelect.innerHTML = '<option value="" disabled selected>No ports found</option>';
                         noPortsFoundMsg.classList.remove('hidden');
+                        portSelect.disabled = true;
                     }
                 } catch (error) {
                     console.error('Error fetching serial ports:', error);
                     portSelect.innerHTML = '<option value="" disabled selected>Error loading</option>';
                     portErrorMsg.classList.remove('hidden');
-                } finally {
-                    // Only enable if ports were found AND not currently connected
-                    portSelect.disabled = portSelect.options.length === 0 || isConnected;
+                    portSelect.disabled = true;
                 }
             }
 
@@ -269,7 +266,6 @@ def arduino_serial_page():
                     appendOutput(`[System: Connecting to ${port} @ ${baud} baud...]`);
                     socket.emit('serial_connect', { port: port, baud_rate: parseInt(baud) });
                      // Let server response re-enable the button
-                     // setTimeout(() => { if (!isConnected) connectButton.disabled = false; } , 2000);
                 }
             });
 
@@ -296,7 +292,6 @@ def arduino_serial_page():
                  setUIConnected(false);
                  // Fetch ports happens on socket connect
             });
-
         </script>
     </body>
     </html>
@@ -307,7 +302,8 @@ def arduino_serial_page():
 
 def read_serial_data_task(sid, ser_instance, stop_event):
     """Background task function to read serial data."""
-    logger = current_app.logger # Get logger from app context
+    # Use current_app.logger here because this task is started within an app context
+    logger = current_app.logger
     logger.info(f"Starting serial read thread for {sid} on {ser_instance.port}")
     if not socketio_instance:
         logger.error("SocketIO instance not initialized in serial_monitor module!")
@@ -320,31 +316,29 @@ def read_serial_data_task(sid, ser_instance, stop_event):
                 try:
                     decoded_line = line.decode('utf-8', errors='replace').strip()
                     if decoded_line:
-                        # Use socketio_instance to emit
                         socketio_instance.emit('serial_data', {'data': decoded_line}, to=sid)
-                        socketio_instance.sleep(0.01) # Yield control
+                        socketio_instance.sleep(0.01)
                 except UnicodeDecodeError as ue:
                     logger.warning(f"Unicode decode error for {sid}: {ue}. Data: {line!r}")
                     socketio_instance.emit('serial_data', {'data': f'[Decode Error: {line!r}]'}, to=sid)
                     socketio_instance.sleep(0.01)
             else:
-                # Check if port was closed externally or stop requested
                 if not ser_instance.is_open or stop_event.is_set():
                     break
-                socketio_instance.sleep(0.05) # Wait longer if no data
+                socketio_instance.sleep(0.05)
 
         except serial.SerialException as e:
             logger.error(f"Serial error for {sid} on {ser_instance.port}: {e}")
+            # Emit error back to the specific client
             socketio_instance.emit('serial_error', {'error': f'Serial Error: {e}'}, to=sid)
-            stop_event.set() # Signal stop
-            break
+            stop_event.set()
+            break # Exit loop on serial error
         except Exception as e:
             logger.error(f"Unexpected error in read loop for {sid}: {e}", exc_info=True)
             socketio_instance.emit('serial_error', {'error': f'Unexpected read loop error: {e}'}, to=sid)
             stop_event.set()
             break
 
-    # Cleanup after loop (port might already be closed by cleanup function)
     if ser_instance and ser_instance.is_open:
         try:
             ser_instance.close()
@@ -359,7 +353,7 @@ def handle_client_disconnect(sid):
 
 def handle_serial_connect_request(sid, json_data):
     """Called by main.py to handle connection request."""
-    logger = current_app.logger
+    logger = current_app.logger # Okay to use logger here
     port = json_data.get('port')
     baud_rate = json_data.get('baud_rate')
     logger.info(f"Connect request from {sid} for {port} @ {baud_rate} baud")
@@ -370,7 +364,7 @@ def handle_serial_connect_request(sid, json_data):
 
     if sid in serial_connections:
         logger.warning(f"{sid} requested connect but already handled? Cleaning up first.")
-        cleanup_serial_connection(sid) # Attempt cleanup before reconnect
+        cleanup_serial_connection(sid)
 
     try:
         ser = serial.Serial(port, baud_rate, timeout=1)
@@ -379,11 +373,11 @@ def handle_serial_connect_request(sid, json_data):
         logger.info(f"Successfully opened {port} for {sid}")
 
         stop_event = threading.Event()
-        # Use socketio's background task manager via the instance
         read_thread = socketio_instance.start_background_task(
             read_serial_data_task, sid, ser, stop_event
         )
         if read_thread is None:
+             ser.close() # Close port if task failed to start
              raise Exception("Failed to start background task.")
 
         serial_connections[sid] = {'serial': ser, 'thread': read_thread, 'stop_event': stop_event}
@@ -398,7 +392,7 @@ def handle_serial_connect_request(sid, json_data):
 
 def handle_serial_disconnect_request(sid):
     """Called by main.py to handle disconnect request."""
-    logger = current_app.logger
+    logger = current_app.logger # Okay here
     logger.info(f"Disconnect request from {sid}")
     if cleanup_serial_connection(sid):
          socketio_instance.emit('serial_status', {'status': 'disconnected', 'message': 'Disconnected.'}, to=sid)
@@ -407,7 +401,7 @@ def handle_serial_disconnect_request(sid):
 
 def handle_serial_send_request(sid, json_data):
     """Called by main.py to handle data sending."""
-    logger = current_app.logger
+    logger = current_app.logger # Okay here
     data_to_send = json_data.get('data')
 
     if sid in serial_connections and data_to_send is not None:
@@ -415,7 +409,7 @@ def handle_serial_send_request(sid, json_data):
         ser = conn['serial']
         try:
             if ser and ser.is_open:
-                 data_with_newline = data_to_send + '\n' # Assuming newline termination needed
+                 data_with_newline = data_to_send + '\n'
                  ser.write(data_with_newline.encode('utf-8', errors='replace'))
             else:
                  logger.warning(f"Send attempt from {sid} but serial not open.")
@@ -430,7 +424,7 @@ def handle_serial_send_request(sid, json_data):
 
 def cleanup_serial_connection(sid):
     """Safely close serial port and stop read thread for a given SID."""
-    logger = current_app.logger
+    logger = current_app.logger # Okay here (usually called from disconnect event)
     if sid in serial_connections:
         conn = serial_connections.pop(sid)
         ser = conn.get('serial')
