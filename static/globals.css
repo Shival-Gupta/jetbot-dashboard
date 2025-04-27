@@ -1,50 +1,50 @@
-/* Define custom properties for light and dark themes */
+/* Define custom properties for light and dark themes based on original Tailwind palette */
 :root {
-    --background: #FFFFFF; /* White */
-    --foreground: #1A1A1A; /* Dark gray */
-    --card: #FFFFFF; /* White */
-    --card-foreground: #1A1A1A; /* Dark gray */
-    --primary: #6B46C1; /* Purple */
-    --primary-foreground: #F7FAFC; /* Off-white */
-    --secondary: #EDF2F7; /* Light gray */
-    --secondary-foreground: #2D3748; /* Darker gray */
-    --muted: #E2E8F0; /* Light gray */
-    --muted-foreground: #718096; /* Gray */
-    --accent: #E2E8F0; /* Light gray */
-    --accent-foreground: #2D3748; /* Darker gray */
-    --destructive: #F56565; /* Red */
-    --destructive-foreground: #F7FAFC; /* Off-white */
-    --border: #E2E8F0; /* Light gray */
-    --input: #E2E8F0; /* Light gray */
-    --ring: #6B46C1; /* Purple */
-    --progress-bar-bg: #E5E7EB; /* Light gray */
-    --progress-bar: #3B82F6; /* Blue */
-    --progress-bar-warn: #F59E0B; /* Orange */
-    --progress-bar-error: #EF4444; /* Red */
+    --background: #F3F4F6; /* Tailwind gray-100 */
+    --foreground: #1F2937; /* Tailwind gray-900 */
+    --card: #FFFFFF; /* Tailwind white */
+    --card-foreground: #1F2937; /* Tailwind gray-900 */
+    --primary: #8B5CF6; /* Tailwind purple-500 */
+    --primary-foreground: #FFFFFF; /* Tailwind white */
+    --secondary: #D1D5DB; /* Tailwind gray-300 */
+    --secondary-foreground: #374151; /* Tailwind gray-700 */
+    --muted: #E5E7EB; /* Tailwind gray-200 */
+    --muted-foreground: #4B5563; /* Tailwind gray-600 */
+    --accent: #D1D5DB; /* Tailwind gray-300 */
+    --accent-foreground: #374151; /* Tailwind gray-700 */
+    --destructive: #EF4444; /* Tailwind red-500 */
+    --destructive-foreground: #FFFFFF; /* Tailwind white */
+    --border: #E5E7EB; /* Tailwind gray-200 */
+    --input: #E5E7EB; /* Tailwind gray-200 */
+    --ring: #8B5CF6; /* Tailwind purple-500 */
+    --progress-bar-bg: #E5E7EB; /* Tailwind gray-200 */
+    --progress-bar: #3B82F6; /* Tailwind blue-500 */
+    --progress-bar-warn: #F59E0B; /* Tailwind yellow-500 */
+    --progress-bar-error: #EF4444; /* Tailwind red-500 */
 }
 
 .dark {
-    --background: #1A1A1A; /* Dark gray */
-    --foreground: #F7FAFC; /* Off-white */
-    --card: #1A1A1A; /* Dark gray */
-    --card-foreground: #F7FAFC; /* Off-white */
-    --primary: #805AD5; /* Lighter purple */
-    --primary-foreground: #F7FAFC; /* Off-white */
-    --secondary: #2D3748; /* Darker gray */
-    --secondary-foreground: #F7FAFC; /* Off-white */
-    --muted: #2D3748; /* Darker gray */
-    --muted-foreground: #A0AEC0; /* Light gray */
-    --accent: #2D3748; /* Darker gray */
-    --accent-foreground: #F7FAFC; /* Off-white */
-    --destructive: #C53030; /* Darker red */
-    --destructive-foreground: #F7FAFC; /* Off-white */
-    --border: #2D3748; /* Darker gray */
-    --input: #2D3748; /* Darker gray */
-    --ring: #805AD5; /* Lighter purple */
-    --progress-bar-bg: #4B5563; /* Dark gray */
-    --progress-bar: #3B82F6; /* Blue */
-    --progress-bar-warn: #F59E0B; /* Orange */
-    --progress-bar-error: #EF4444; /* Red */
+    --background: #111827; /* Tailwind gray-900 */
+    --foreground: #F9FAFB; /* Tailwind gray-100 */
+    --card: #1F2937; /* Tailwind gray-800 */
+    --card-foreground: #F9FAFB; /* Tailwind gray-100 */
+    --primary: #A78BFA; /* Tailwind purple-400 (slightly lighter for dark mode) */
+    --primary-foreground: #FFFFFF; /* Tailwind white */
+    --secondary: #4B5563; /* Tailwind gray-600 */
+    --secondary-foreground: #D1D5DB; /* Tailwind gray-300 */
+    --muted: #4B5563; /* Tailwind gray-600 */
+    --muted-foreground: #9CA3AF; /* Tailwind gray-400 */
+    --accent: #4B5563; /* Tailwind gray-600 */
+    --accent-foreground: #D1D5DB; /* Tailwind gray-300 */
+    --destructive: #DC2626; /* Tailwind red-600 (slightly darker for dark mode) */
+    --destructive-foreground: #FFFFFF; /* Tailwind white */
+    --border: #374151; /* Tailwind gray-700 */
+    --input: #374151; /* Tailwind gray-700 */
+    --ring: #Ailibre: #A78BFA; /* Tailwind purple-400 */
+    --progress-bar-bg: #4B5563; /* Tailwind gray-600 */
+    --progress-bar: #3B82F6; /* Tailwind blue-500 */
+    --progress-bar-warn: #F59E0B; /* Tailwind yellow-500 */
+    --progress-bar-error: #EF4444; /* Tailwind red-500 */
 }
 
 /* Apply custom properties to elements */
@@ -64,7 +64,7 @@ button.bg-purple-500 {
 }
 
 button.bg-purple-500:hover {
-    background-color: var(--ring);
+    background-color: #7C3AED; /* Tailwind purple-600 */
 }
 
 button.bg-red-500 {
@@ -73,7 +73,7 @@ button.bg-red-500 {
 }
 
 button.bg-red-500:hover {
-    background-color: #B91C1C; /* Slightly darker red */
+    background-color: #DC2626; /* Tailwind red-600 */
 }
 
 button.bg-gray-300 {
@@ -82,7 +82,7 @@ button.bg-gray-300 {
 }
 
 button.bg-gray-300:hover {
-    background-color: #D7DCE4; /* Slightly darker secondary */
+    background-color: #B9C2CE; /* Tailwind gray-400 */
 }
 
 .dark button.bg-gray-600 {
@@ -91,7 +91,7 @@ button.bg-gray-300:hover {
 }
 
 .dark button.bg-gray-600:hover {
-    background-color: #4A5568; /* Slightly lighter secondary */
+    background-color: #6B7280; /* Tailwind gray-500 */
 }
 
 .text-gray-600 {
