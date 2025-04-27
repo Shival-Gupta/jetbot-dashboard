@@ -1,0 +1,137 @@
+/* Define custom properties for light and dark themes */
+:root {
+    --background: #FFFFFF; /* White */
+    --foreground: #1A1A1A; /* Dark gray */
+    --card: #FFFFFF; /* White */
+    --card-foreground: #1A1A1A; /* Dark gray */
+    --primary: #6B46C1; /* Purple */
+    --primary-foreground: #F7FAFC; /* Off-white */
+    --secondary: #EDF2F7; /* Light gray */
+    --secondary-foreground: #2D3748; /* Darker gray */
+    --muted: #E2E8F0; /* Light gray */
+    --muted-foreground: #718096; /* Gray */
+    --accent: #E2E8F0; /* Light gray */
+    --accent-foreground: #2D3748; /* Darker gray */
+    --destructive: #F56565; /* Red */
+    --destructive-foreground: #F7FAFC; /* Off-white */
+    --border: #E2E8F0; /* Light gray */
+    --input: #E2E8F0; /* Light gray */
+    --ring: #6B46C1; /* Purple */
+    --progress-bar-bg: #E5E7EB; /* Light gray */
+    --progress-bar: #3B82F6; /* Blue */
+    --progress-bar-warn: #F59E0B; /* Orange */
+    --progress-bar-error: #EF4444; /* Red */
+}
+
+.dark {
+    --background: #1A1A1A; /* Dark gray */
+    --foreground: #F7FAFC; /* Off-white */
+    --card: #1A1A1A; /* Dark gray */
+    --card-foreground: #F7FAFC; /* Off-white */
+    --primary: #805AD5; /* Lighter purple */
+    --primary-foreground: #F7FAFC; /* Off-white */
+    --secondary: #2D3748; /* Darker gray */
+    --secondary-foreground: #F7FAFC; /* Off-white */
+    --muted: #2D3748; /* Darker gray */
+    --muted-foreground: #A0AEC0; /* Light gray */
+    --accent: #2D3748; /* Darker gray */
+    --accent-foreground: #F7FAFC; /* Off-white */
+    --destructive: #C53030; /* Darker red */
+    --destructive-foreground: #F7FAFC; /* Off-white */
+    --border: #2D3748; /* Darker gray */
+    --input: #2D3748; /* Darker gray */
+    --ring: #805AD5; /* Lighter purple */
+    --progress-bar-bg: #4B5563; /* Dark gray */
+    --progress-bar: #3B82F6; /* Blue */
+    --progress-bar-warn: #F59E0B; /* Orange */
+    --progress-bar-error: #EF4444; /* Red */
+}
+
+/* Apply custom properties to elements */
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+}
+
+.container {
+    background-color: var(--card);
+    color: var(--card-foreground);
+}
+
+button.bg-purple-500 {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+}
+
+button.bg-purple-500:hover {
+    background-color: var(--ring);
+}
+
+button.bg-red-500 {
+    background-color: var(--destructive);
+    color: var(--destructive-foreground);
+}
+
+button.bg-red-500:hover {
+    background-color: #B91C1C; /* Slightly darker red */
+}
+
+button.bg-gray-300 {
+    background-color: var(--secondary);
+    color: var(--secondary-foreground);
+}
+
+button.bg-gray-300:hover {
+    background-color: #D7DCE4; /* Slightly darker secondary */
+}
+
+.dark button.bg-gray-600 {
+    background-color: var(--secondary);
+    color: var(--secondary-foreground);
+}
+
+.dark button.bg-gray-600:hover {
+    background-color: #4A5568; /* Slightly lighter secondary */
+}
+
+.text-gray-600 {
+    color: var(--muted-foreground);
+}
+
+.dark .text-gray-400 {
+    color: var(--muted-foreground);
+}
+
+.border-gray-200 {
+    border-color: var(--border);
+}
+
+.dark .border-gray-700 {
+    border-color: var(--border);
+}
+
+/* Progress bar styles */
+.progress-bar-bg {
+    background-color: var(--progress-bar-bg);
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background-color: var(--progress-bar);
+    height: 1rem;
+    border-radius: 0.375rem;
+    text-align: center;
+    color: white;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    transition: width 0.3s ease-in-out;
+}
+
+.progress-bar-warn {
+    background-color: var(--progress-bar-warn);
+}
+
+.progress-bar-error {
+    background-color: var(--progress-bar-error);
+}
