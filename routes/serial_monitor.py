@@ -158,11 +158,11 @@ def arduino_serial_page():
 
 
             function appendOutput(text) {
-                const textNode = document.createTextNode(`${text}\n`); // Template literal with newline
-                outputArea.appendChild(textNode);
-                if (autoscrollCheckbox.checked) {
-                    outputArea.scrollTop = outputArea.scrollHeight;
-                }
+                 const textNode = document.createTextNode(`${text}\n`); // Add newline for readability
+                 outputArea.appendChild(textNode);
+                 if (autoscrollCheckbox.checked) {
+                     outputArea.scrollTop = outputArea.scrollHeight;
+                 }
             }
 
             // --- Port Fetching ---
@@ -173,7 +173,7 @@ def arduino_serial_page():
                 portSelect.innerHTML = '<option value="" disabled selected>Refreshing...</option>';
 
                 try {
-                    const response = await fetch('/api/ports');
+                    const response = await fetch('/api/ports'); // Use shared API endpoint
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const ports = await response.json();
 
@@ -184,19 +184,20 @@ def arduino_serial_page():
                             option.value = port;
                             option.textContent = port;
                             portSelect.appendChild(option);
-                            if (index === 0) option.selected = true;
+                            if (index === 0) option.selected = true; // Select first found
                         });
-                        portSelect.disabled = isConnected; // Only disable if connected
+                         portSelect.disabled = false;
                     } else {
                         portSelect.innerHTML = '<option value="" disabled selected>No ports found</option>';
                         noPortsFoundMsg.classList.remove('hidden');
-                        portSelect.disabled = true;
                     }
                 } catch (error) {
                     console.error('Error fetching serial ports:', error);
                     portSelect.innerHTML = '<option value="" disabled selected>Error loading</option>';
                     portErrorMsg.classList.remove('hidden');
-                    portSelect.disabled = true;
+                } finally {
+                    // Only enable if ports were found AND not currently connected
+                    portSelect.disabled = portSelect.options.length === 0 || isConnected;
                 }
             }
 
