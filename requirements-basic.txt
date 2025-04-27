@@ -1,0 +1,7 @@
+# requirements.txt
+Flask>=2.0 # Using a base version, adjust if needed
+Flask-SocketIO>=5.0
+python-dotenv>=0.15
+pyserial>=3.5
+psutil>=5.8
+eventlet>=0.30 # Required async mode for Flask-SocketIO
