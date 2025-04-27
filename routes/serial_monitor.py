@@ -158,11 +158,11 @@ def arduino_serial_page():
 
 
             function appendOutput(text) {
-                 const textNode = document.createTextNode(text + '\n'); // Add newline for readability
-                 outputArea.appendChild(textNode);
-                 if (autoscrollCheckbox.checked) {
-                     outputArea.scrollTop = outputArea.scrollHeight;
-                 }
+                const textNode = document.createTextNode(`${text}\n`); // Template literal with newline
+                outputArea.appendChild(textNode);
+                if (autoscrollCheckbox.checked) {
+                    outputArea.scrollTop = outputArea.scrollHeight;
+                }
             }
 
             // --- Port Fetching ---
