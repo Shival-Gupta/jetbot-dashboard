@@ -1,0 +1,16 @@
+# /etc/sudoers.d/jetbot-dashboard-sudoer
+
+# Define “safe” system-power commands
+Cmnd_Alias WEBSHUTDOWN = \
+    /usr/bin/systemctl reboot, \
+    /usr/bin/systemctl poweroff
+
+# Define “dashboard control” commands
+Cmnd_Alias DASHBOARDCTL = \
+    /usr/bin/systemctl start jetbot-dashboard.service, \
+    /usr/bin/systemctl stop jetbot-dashboard.service, \
+    /usr/bin/systemctl status jetbot-dashboard.service, \
+    /usr/bin/systemctl restart jetbot-dashboard.service
+
+# Allow the jetson user to invoke those commands without a password
+jetson ALL=(ALL) NOPASSWD: WEBSHUTDOWN, DASHBOARDCTL

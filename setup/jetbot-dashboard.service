@@ -1,0 +1,15 @@
+[Unit]
+Description=JetBot Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/jetbot-dashboard
+ExecStart=/home/jetson/jetbot-dashboard/setup/start-jetbot-dashboard.sh
+Restart=on-failure
+RestartSec=5s
+Environment=PATH=/home/jetson/jetbot-dashboard/.venv/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
