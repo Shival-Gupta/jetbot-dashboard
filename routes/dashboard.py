@@ -125,62 +125,98 @@ def index():
     <body class="p-6 min-h-screen">
         <div class="container mx-auto max-w-6xl p-6 rounded-lg shadow-xl">
             <!-- region Header -->
-            <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+            <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+            <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-y-4 md:gap-y-0 items-center">
+                
+                <!-- region Left -->
                 <div class="flex flex-col space-y-2">
-                    <h1 class="text-3xl font-bold">Jetbot Dashboard</h1>
-                    <div class="flex items-center space-x-2">
-                        <div id="status-dot" class="w-3 h-3 rounded-full"></div>
-                        <span id="status-text" class="text-sm"></span>
-                        <button onclick="controlService('restart')" 
-                                class="py-1 px-2 bg-gray-300 rounded hover:bg-gray-400 
-                                       dark:bg-gray-600 dark:hover:bg-gray-500 transition text-sm">
-                            Restart Service
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">🚀 Jetbot Dashboard</h1>
+                    <span 
+                    id="status-dot" 
+                    class="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" 
+                    aria-label="Service status">
+                    </span>
+                    <span id="status-text" class="text-sm text-gray-700 dark:text-gray-300">Loading…</span>
+                </div>
+                <button 
+                    onclick="controlService('restart')" 
+                    class="inline-flex items-center gap-1 text-sm font-medium py-1.5 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded transition"
+                    aria-label="Restart Jetbot service">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6" />
+                    </svg>
+                    Restart Service
+                </button>
+                </div>
+                <!-- endregion Left -->
+
+                <!-- region Center -->
+                <div class="flex flex-col space-y-3 text-sm text-gray-700 dark:text-gray-300 text-center">
+                <div>
+                    <strong>Host:</strong> {{ hostname }} &nbsp;|&nbsp; <strong>Uptime:</strong> {{ uptime }}
+                </div>
+                <div>
+                    <strong>Current:</strong> {{ current_version[:7] }} &nbsp;|&nbsp; <strong>Latest:</strong> {{ latest_version[:7] }}
+                </div>
+
+                {% if current_version != latest_version %}
+                <div class="inline-block bg-yellow-50 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-4 py-2 rounded-lg shadow">
+                    <div class="flex items-center justify-between">
+                    <span class="font-semibold">Update Available!</span>
+                    <form method="POST" action="{{ url_for('dashboard.update') }}">
+                        <button 
+                        type="submit" 
+                        class="inline-flex items-center gap-1 text-sm font-bold py-1.5 px-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded transition"
+                        aria-label="Update Jetbot to latest version">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6" />
+                        </svg>
+                        Update Now
                         </button>
+                    </form>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4 mt-4 sm:mt-0">
-                    <div class="flex flex-col space-y-2">
-                        <span class="text-sm">
-                            Hostname: <span class="font-semibold">{{ hostname }}</span> |
-                            Uptime: <span class="font-semibold">{{ uptime }}</span> |
-                        </span>
-                        <span class="text-sm">
-                            Current: <span class="font-semibold">{{ current_version[:7] }}</span> |
-                            Latest: <span class="font-semibold">{{ latest_version[:7] }}</span>
-                        </span>
-                        {% if current_version != latest_version %}
-                        <div class="mt-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg shadow">
-                            <div class="flex items-center justify-between">
-                                <div class="font-semibold">Update Available!</div>
-                                <form method="POST" action="{{ url_for('dashboard.update') }}">
-                                    <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
-                                        Update Now
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    <button id="theme-toggle" 
-                            class="py-1 px-3 bg-gray-300 rounded hover:bg-gray-400 
-                                   dark:bg-gray-600 dark:hover:bg-gray-500 transition">
-                        <span id="theme-icon">🌙</span>
+                {% endif %}
+                </div>
+                <!-- endregion Center -->
+
+                <!-- region Right -->
+                <div class="flex flex-col md:flex-row md:justify-end items-center space-y-3 md:space-y-0 md:space-x-4">
+                
+                <!-- region Theme Toggle -->
+                <button 
+                    id="theme-toggle" 
+                    class="p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded transition" 
+                    aria-label="Toggle light / dark theme">
+                    <span id="theme-icon" class="text-lg">🌙</span>
+                </button>
+                <!-- endregion Theme Toggle -->
+
+                <!-- region System Controls -->
+                <div class="flex gap-3">
+                    <button 
+                    onclick="confirmAction('reboot', '/api/system/reboot', 'System is rebooting...')" 
+                    class="flex-1 text-sm font-medium py-2 px-4 bg-purple-500 hover:bg-purple-600 text-white rounded transition"
+                    aria-label="Reboot system">
+                    Reboot
                     </button>
-                    <!-- region System Controls -->
-                    <div class="flex flex-wrap justify-center gap-3">
-                        <button onclick="confirmAction('reboot', '/api/system/reboot', 'System is rebooting...')" 
-                                class="py-2 px-4 bg-purple-500 text-white rounded hover:bg-purple-600 transition text-sm font-medium">
-                            Reboot
-                        </button>
-                        <button onclick="confirmAction('power off', '/api/system/poweroff', 'System is shutting down...')" 
-                                class="py-2 px-4 bg-red-500 text-white rounded hover:bg-red-600 transition text-sm font-medium">
-                            Power Off
-                        </button>
-                    </div>
-                    <!-- endregion -->
+                    <button 
+                    onclick="confirmAction('power off', '/api/system/poweroff', 'System is shutting down...')" 
+                    class="flex-1 text-sm font-medium py-2 px-4 bg-red-500 hover:bg-red-600 text-white rounded transition"
+                    aria-label="Power off system">
+                    Power Off
+                    </button>
                 </div>
+                <!-- endregion System Controls -->
+
+                </div>
+                <!-- endregion Right -->
+
             </div>
-            <!-- endregion -->
+            </header>
+            <!-- endregion Header -->
+
 
             <!-- region Tools -->
             <div class="p-4 rounded-lg shadow border mb-6">

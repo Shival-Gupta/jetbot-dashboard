@@ -1,4 +1,4 @@
-# Mecanum Robot Control System
+# Jetbot Dashboard
 
 <div align="center">
   <img src="https://img.shields.io/badge/Python-3.6%2B-blue" alt="Python Version">
