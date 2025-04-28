@@ -134,22 +134,24 @@ def index():
                 <div class="flex flex-col space-y-2">
                 <div class="flex items-center space-x-3">
                     <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">🚀 Jetbot Dashboard</h1>
+                </div>
+                <div class="flex items-center space-x-2">
                     <span 
                     id="status-dot" 
                     class="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600" 
                     aria-label="Service status">
                     </span>
                     <span id="status-text" class="text-sm text-gray-700 dark:text-gray-300">Loading…</span>
-                </div>
-                <button 
+                    <button 
                     onclick="controlService('restart')" 
                     class="inline-flex items-center gap-1 text-sm font-medium py-1.5 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded transition"
                     aria-label="Restart Jetbot service">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6" />
                     </svg>
-                    Restart Service
-                </button>
+                    Restart
+                    </button>
+                </div>
                 </div>
                 <!-- endregion Left -->
 
@@ -218,6 +220,7 @@ def index():
             </div>
             </header>
             <!-- endregion Header -->
+
 
 
             <!-- region Tools -->
