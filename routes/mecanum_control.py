@@ -433,7 +433,7 @@ def init_socketio(sio_instance):
     def handle_mecanum_connect():
         from flask import request # Import request context locally
         logger = get_logger()
-        logger(f'INFO: Client {request.sid} connected to Mecanum namespace')
+        logger.info(f'INFO: Client {request.sid} connected to Mecanum namespace')
         load_config() # Ensure latest config when client connects
         emit('mecanum_config', {'config': config})
         # Don't assume connection status, send current actual status
@@ -443,7 +443,7 @@ def init_socketio(sio_instance):
     def handle_mecanum_disconnect():
         from flask import request # Import request context locally
         logger = get_logger()
-        logger(f'INFO: Client {request.sid} disconnected from Mecanum namespace')
+        logger.info(f'INFO: Client {request.sid} disconnected from Mecanum namespace')
         # Optional: Add logic if needed when clients leave
 
     @socketio.on('mecanum_connect_serial', namespace=NAMESPACE)
