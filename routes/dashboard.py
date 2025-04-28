@@ -71,13 +71,22 @@ def get_service_status():
 
 @dashboard_bp.route('/update', methods=['POST'])
 def update():
-    """Perform git pull to update the repository."""
+    """Perform git pull to update the repository, then restart the service."""
     try:
+        # Step 1: Git pull
         output = subprocess.check_output(['git', 'pull'], text=True)
         print(output)  # Optional: log output
+
+        # Step 2: Restart the service
+        subprocess.run(['sudo', 'systemctl', 'restart', 'jetbot-dashboard.service'], check=True)
+
+        # Step 3: Redirect back to dashboard
         return redirect(url_for('dashboard.index'))
+
+    except subprocess.CalledProcessError as e:
+        return f"Update or restart failed: {str(e)}", 500
     except Exception as e:
-        return f"Update failed: {str(e)}", 500
+        return f"Unexpected error: {str(e)}", 500
 
 def get_git_versions():
     """Fetch current and latest git commit hashes."""
