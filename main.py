@@ -1,5 +1,4 @@
 # main.py
-
 import eventlet
 eventlet.monkey_patch()  # must be first
 
@@ -9,11 +8,10 @@ from dotenv import load_dotenv
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
-# Load environment vars
+# Load env
 load_dotenv()
-print(f"SECRET_KEY loaded: {'Yes' if os.getenv('SECRET_KEY') else 'No'}")
-
 import config
+
 from routes.dashboard import dashboard_bp
 from routes.uploader import uploader_bp
 from routes.serial_monitor import (
@@ -24,32 +22,30 @@ from routes.serial_monitor import (
     handle_serial_disconnect_request,
     handle_serial_send_request
 )
-from routes.terminal import terminal_bp, TerminalNamespace
+# Notice we also import init_socketio for terminal
+from routes.terminal import (
+    terminal_bp,
+    TerminalNamespace,
+    init_socketio as init_terminal_socketio
+)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.SECRET_KEY
-if config.SECRET_KEY == 'temporary_insecure_development_key':
-    app.logger.warning("Using default insecure SECRET_KEY—change it in your .env!")
 
-# Socket.IO setup
+# Initialize Socket.IO
 socketio = SocketIO(app, async_mode='eventlet', logger=True, engineio_logger=True)
+
+# Give both modules the socketio instance
 init_serial_monitor_socketio(socketio)
+init_terminal_socketio(socketio)
 
-# Logging
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-if not app.debug:
-    app.logger.setLevel(logging.INFO)
-app.logger.info("App & SocketIO initialized")
-
-# Register blueprints
+# Register Blueprints
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(uploader_bp)
 app.register_blueprint(serial_monitor_bp)
 app.register_blueprint(terminal_bp)
-app.logger.info("Blueprints registered")
 
-# Mount the terminal namespace under '/terminal'
+# Mount the terminal namespace
 socketio.on_namespace(TerminalNamespace('/terminal'))
 
 # Existing serial handlers
