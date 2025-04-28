@@ -5,24 +5,22 @@ import json
 import os
 import serial
 from flask import (Blueprint, render_template, request, jsonify, current_app, url_for)
-from flask_socketio import emit, disconnect # Import SocketIO components
+# Import SocketIO components needed at the top level (emit might be needed globally)
+from flask_socketio import emit
 
 # --- Configuration ---
-# Store config in the project root, separate from main config
 CONFIG_FILE = 'mecanum_config.json'
 NUM_MOTORS = 4
 PWM_MAX = 255
 
 # --- Global Variables within Blueprint Context ---
-# We manage serial connection independently for now. Be careful!
 ser = None
 config = {}
 last_sent_command = ""
-default_serial_port = '/dev/ttyACM0' # Default if not in config
-default_baud_rate = 9600         # Default if not in config
+default_serial_port = '/dev/ttyACM0'
+default_baud_rate = 9600
 
 # --- Blueprint Definition ---
-# Point template/static folders back to the main app's locations
 mecanum_control_bp = Blueprint(
     'mecanum_control',
     __name__,
@@ -30,21 +28,14 @@ mecanum_control_bp = Blueprint(
     static_folder='../static'
 )
 
-# --- SocketIO Instance ---
+# --- SocketIO Instance Holder ---
 # This will be set by main.py using init_socketio
 socketio = None
-
-def init_socketio(sio_instance):
-    """ Function to receive the SocketIO instance from main.py """
-    global socketio
-    socketio = sio_instance
-    current_app.logger.info("Mecanum Control SocketIO initialized.")
-    # Add specific SocketIO event handlers here if needed globally for this BP
-    # Example: socketio.on('connect', namespace='/mecanum')
+NAMESPACE = '/mecanum' # Define namespace constant
 
 # --- Default Configuration ---
 def get_default_config():
-    # Reads defaults from main app config if available, otherwise uses hardcoded
+    # ... (keep the function as it was) ...
     try:
         import config as main_config
         robot_port = getattr(main_config, 'ROBOT_SERIAL_PORT', default_serial_port)
@@ -67,8 +58,10 @@ def get_default_config():
         }
     }
 
+
 # --- Configuration Handling (Adapted for Blueprint) ---
 def load_config():
+    # ... (keep the function as it was) ...
     global config
     defaults = get_default_config()
     if os.path.exists(CONFIG_FILE):
@@ -79,28 +72,39 @@ def load_config():
                 for key in defaults:
                     if isinstance(defaults[key], dict):
                         config[key] = {**defaults[key], **config.get(key, {})}
-                current_app.logger.info(f"Mecanum controller: Loaded config from {CONFIG_FILE}")
+                # Use current_app.logger only if app context is available, might not be during initial load
+                # print(f"INFO: Mecanum controller: Loaded config from {CONFIG_FILE}") # Use print for early logging
         except (json.JSONDecodeError, IOError, TypeError) as e:
-            current_app.logger.error(f"Mecanum controller: Error loading config '{CONFIG_FILE}': {e}. Using defaults.")
+            # print(f"ERROR: Mecanum controller: Error loading config '{CONFIG_FILE}': {e}. Using defaults.") # Use print
             config = defaults
-            save_config()
+            save_config() # Save defaults if loading failed
     else:
-        current_app.logger.info(f"Mecanum controller: Config file '{CONFIG_FILE}' not found. Creating default.")
+        # print(f"INFO: Mecanum controller: Config file '{CONFIG_FILE}' not found. Creating default.") # Use print
         config = defaults
         save_config()
 
 def save_config():
+    # ... (keep the function as it was) ...
     global config
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
-        current_app.logger.info(f"Mecanum controller: Configuration saved to {CONFIG_FILE}")
+        if current_app: # Check if app context exists for logger
+             current_app.logger.info(f"Mecanum controller: Configuration saved to {CONFIG_FILE}")
+        else:
+             print(f"INFO: Mecanum controller: Configuration saved to {CONFIG_FILE}")
         return True
     except IOError as e:
-        current_app.logger.error(f"Mecanum controller: Error saving config file '{CONFIG_FILE}': {e}")
+        if current_app:
+            current_app.logger.error(f"Mecanum controller: Error saving config file '{CONFIG_FILE}': {e}")
+        else:
+            print(f"ERROR: Mecanum controller: Error saving config file '{CONFIG_FILE}': {e}")
         return False
 
 # --- Serial Communication (Independent - CAUTION: Potential Conflicts) ---
+# ... (Keep get_serial_status, init_serial, close_serial, send_serial_command as they were) ...
+# Ensure logger calls check for current_app or use print for early stages if needed
+
 def get_serial_status():
     """Returns the connection status of the mecanum controller's serial port."""
     return "Connected" if ser and ser.is_open else "Disconnected"
@@ -112,90 +116,88 @@ def init_serial():
     port = config.get("serial_port", default_serial_port)
     baud = config.get("baud_rate", default_baud_rate)
 
+    logger = current_app.logger if current_app else print # Use logger if available
+
     if ser and ser.is_open:
         if ser.port == port and ser.baudrate == baud:
-             current_app.logger.info(f"Mecanum controller: Already connected to {port}")
-             return True # Already connected to the correct port
+             logger(f"INFO: Mecanum controller: Already connected to {port}")
+             return True
         else:
-             current_app.logger.info(f"Mecanum controller: Closing existing connection to {ser.port} to connect to {port}")
-             ser.close() # Close if port/baud changed
+             logger(f"INFO: Mecanum controller: Closing existing connection to {ser.port} to connect to {port}")
+             ser.close()
 
-    # *** CRITICAL WARNING ***
-    # Check if the port is potentially managed by serial_monitor.py - This is hard to do perfectly without shared state.
-    # For now, we just try to connect, assuming the user manages conflicts.
-    current_app.logger.warning(f"Mecanum controller: Attempting to connect to {port}. Ensure Serial Monitor is not using this port!")
+    logger(f"WARNING: Mecanum controller: Attempting to connect to {port}. Ensure Serial Monitor is not using this port!")
 
     try:
         ser = serial.Serial(port, baud, timeout=1)
-        time.sleep(2) # Wait for Arduino
+        time.sleep(2)
         if ser.in_waiting > 0:
             initial_message = ser.readline().decode('utf-8', errors='ignore').strip()
-            current_app.logger.info(f"Mecanum controller Arduino ({port}): {initial_message}")
+            logger(f"INFO: Mecanum controller Arduino ({port}): {initial_message}")
         else:
-             current_app.logger.info(f"Mecanum controller: Successfully connected to {port}, no initial message.")
-        # Emit status update to clients on this page
-        if socketio:
-             socketio.emit('mecanum_serial_status', {'status': get_serial_status(), 'port': port}, namespace='/mecanum')
+             logger(f"INFO: Mecanum controller: Successfully connected to {port}, no initial message.")
+        if socketio: # Check if socketio object exists
+             socketio.emit('mecanum_serial_status', {'status': get_serial_status(), 'port': port}, namespace=NAMESPACE)
         return True
     except serial.SerialException as e:
-        current_app.logger.error(f"Mecanum controller: Failed to connect to serial port {port}: {e}")
+        logger(f"ERROR: Mecanum controller: Failed to connect to serial port {port}: {e}")
         ser = None
         if socketio:
-             socketio.emit('mecanum_serial_status', {'status': 'Error', 'port': port, 'message': str(e)}, namespace='/mecanum')
+             socketio.emit('mecanum_serial_status', {'status': 'Error', 'port': port, 'message': str(e)}, namespace=NAMESPACE)
         return False
     except Exception as e:
-        current_app.logger.error(f"Mecanum controller: Unexpected error during serial init on {port}: {e}")
+        logger(f"ERROR: Mecanum controller: Unexpected error during serial init on {port}: {e}")
         ser = None
         if socketio:
-            socketio.emit('mecanum_serial_status', {'status': 'Error', 'port': port, 'message': str(e)}, namespace='/mecanum')
+            socketio.emit('mecanum_serial_status', {'status': 'Error', 'port': port, 'message': str(e)}, namespace=NAMESPACE)
         return False
 
 def close_serial():
-    """ Closes the serial port if open """
     global ser, last_sent_command
+    logger = current_app.logger if current_app else print
     if ser and ser.is_open:
         try:
-            # Send a final stop command before closing?
             stop_command = "0,0,0,0"
             ser.write((stop_command + '\n').encode('utf-8'))
             time.sleep(0.1)
             ser.close()
-            current_app.logger.info(f"Mecanum controller: Closed serial port {ser.port}")
+            logger(f"INFO: Mecanum controller: Closed serial port {ser.port}")
         except Exception as e:
-            current_app.logger.error(f"Mecanum controller: Error sending stop or closing serial port: {e}")
+            logger(f"ERROR: Mecanum controller: Error sending stop or closing serial port: {e}")
     ser = None
     last_sent_command = ""
     if socketio:
-        socketio.emit('mecanum_serial_status', {'status': 'Disconnected'}, namespace='/mecanum')
+        socketio.emit('mecanum_serial_status', {'status': 'Disconnected'}, namespace=NAMESPACE)
 
 
 def send_serial_command(command_str):
     global ser, last_sent_command
+    logger = current_app.logger if current_app else print
     if not ser or not ser.is_open:
-        current_app.logger.warning("Mecanum controller: Serial port not connected. Cannot send command.")
-        # Attempt reconnect automatically? Risky if port is busy.
-        # if not init_serial(): return False # Try to reconnect
+        logger("WARNING: Mecanum controller: Serial port not connected. Cannot send command.")
         return False
 
-    # Avoid spamming identical commands
     if command_str == last_sent_command:
         return True
 
     try:
         ser.write((command_str + '\n').encode('utf-8'))
-        current_app.logger.debug(f"Mecanum controller: Sent command: {command_str}")
+        # Use debug level for frequent messages
+        if current_app: current_app.logger.debug(f"Mecanum controller: Sent command: {command_str}")
         last_sent_command = command_str
         return True
     except serial.SerialException as e:
-        current_app.logger.error(f"Mecanum controller: Serial communication error: {e}")
-        close_serial() # Close on error
+        logger(f"ERROR: Mecanum controller: Serial communication error: {e}")
+        close_serial()
         return False
     except Exception as e:
-        current_app.logger.error(f"Mecanum controller: Unexpected error sending command: {e}")
+        logger(f"ERROR: Mecanum controller: Unexpected error sending command: {e}")
         last_sent_command = ""
         return False
 
-# --- Motor Speed Calculation (Keep as is from previous answer) ---
+
+# --- Motor Speed Calculation ---
+# ... (Keep scale_speed and calculate_motor_speeds as they were) ...
 def scale_speed(speed, deadzone_min, deadzone_max):
     if speed == 0: return 0
     sign = 1 if speed > 0 else -1
@@ -208,8 +210,9 @@ def scale_speed(speed, deadzone_min, deadzone_max):
 def calculate_motor_speeds(logical_speeds):
     global config
     physical_speeds = [0] * NUM_MOTORS
+    logger = current_app.logger if current_app else print
     if not config:
-        current_app.logger.error("Mecanum controller: Config not loaded.")
+        logger("ERROR: Mecanum controller: Config not loaded.")
         return physical_speeds
 
     mapping = config.get('mapping', {})
@@ -225,27 +228,30 @@ def calculate_motor_speeds(logical_speeds):
             scaled_speed = scale_speed(int(calibrated_speed), deadzone_min, deadzone_max)
             final_speed = max(-PWM_MAX, min(PWM_MAX, scaled_speed))
             physical_speeds[physical_index] = final_speed
-        # Add logging for unmapped or invalid indices if needed
+        elif physical_index is not None:
+             logger(f"WARNING: Invalid physical index '{physical_index}' mapped for '{logical_name}'. Ignoring.")
     return physical_speeds
 
-# --- Mecanum Drive Kinematics (Keep as is) ---
+
+# --- Mecanum Drive Kinematics ---
+# ... (Keep get_move_speeds as it was) ...
 def get_move_speeds(vx, vy, omega):
     fl = vx - vy - omega
     fr = vx + vy + omega
     rl = vx + vy - omega
     rr = vx - vy + omega
-    max_abs_speed = max(abs(fl), abs(fr), abs(rl), abs(rr), 1) # Avoid division by zero
+    max_abs_speed = max(abs(fl), abs(fr), abs(rl), abs(rr), 1)
     if max_abs_speed > PWM_MAX:
         scale_factor = PWM_MAX / max_abs_speed
         fl *= scale_factor; fr *= scale_factor; rl *= scale_factor; rr *= scale_factor
     return {"front_left": int(fl), "front_right": int(fr), "rear_left": int(rl), "rear_right": int(rr)}
 
-# --- Flask Routes (Main Page & Config API) ---
+
+# --- Flask Routes (Keep as they are) ---
 @mecanum_control_bp.route('/mecanum-control')
 def controller_page():
-    load_config() # Load fresh config on page load
+    load_config()
     serial_status = get_serial_status()
-    # Pass necessary data to the template
     return render_template(
         'mecanum_control.html',
         config=config,
@@ -253,40 +259,43 @@ def controller_page():
         num_motors=NUM_MOTORS
     )
 
+# ... (keep /get_config, /save_config, /reset_config routes as they were) ...
 @mecanum_control_bp.route('/mecanum-control/get_config', methods=['GET'])
 def get_config_json():
-    # load_config() # Ensure latest config
+    # load_config() # Config should be loaded on page load/init
     serial_status = get_serial_status()
     return jsonify({"config": config, "serial_status": serial_status})
 
 @mecanum_control_bp.route('/mecanum-control/save_config', methods=['POST'])
 def save_config_route():
-    global config # Need to modify global config
+    global config
+    logger = current_app.logger if current_app else print
     try:
         new_config_data = request.get_json()
         if not new_config_data: return jsonify({"success": False, "message": "No data received."}), 400
+
         # Basic validation could be added here
         config = new_config_data # Update global config directly
+
+        port_changed = not (ser and ser.is_open and ser.port == config.get("serial_port"))
+        baud_changed = not (ser and ser.is_open and ser.baudrate == int(config.get("baud_rate",0))) # cast baud to int
+
         if save_config():
-             # If serial port/baud changed, attempt reconnect on next command/page load
-             # Or force reconnect here? Let's try lazy connection for now.
-             # Check if connection needs reset
-             port_changed = not (ser and ser.is_open and ser.port == config.get("serial_port"))
-             baud_changed = not (ser and ser.is_open and ser.baudrate == config.get("baud_rate"))
              if port_changed or baud_changed:
+                 logger(f"INFO: Mecanum Serial Port/Baud changed (Port: {port_changed}, Baud: {baud_changed}). Closing connection.")
                  close_serial() # Close old connection if settings changed
-                 # Don't auto-connect here, let user/page load trigger it
              return jsonify({"success": True, "message": "Configuration saved."})
         else:
             return jsonify({"success": False, "message": "Failed to write config file."}), 500
     except Exception as e:
-        current_app.logger.error(f"Mecanum controller: Error saving config: {e}")
+        logger(f"ERROR: Mecanum controller: Error saving config: {e}")
         return jsonify({"success": False, "message": f"Server error: {e}"}), 500
 
 @mecanum_control_bp.route('/mecanum-control/reset_config', methods=['POST'])
 def reset_config_route():
     global config
-    current_app.logger.info("Mecanum controller: Resetting config to defaults.")
+    logger = current_app.logger if current_app else print
+    logger("INFO: Mecanum controller: Resetting config to defaults.")
     config = get_default_config()
     if save_config():
         close_serial() # Close any existing connection
@@ -294,86 +303,81 @@ def reset_config_route():
     else:
         return jsonify({"success": False, "message": "Failed to write default config file."}), 500
 
-# --- SocketIO Event Handlers for Control ---
-# Define a namespace for clarity
-NAMESPACE = '/mecanum'
 
+# --- SocketIO Initialization and Handlers ---
+def init_socketio(sio_instance):
+    """ Function to receive the SocketIO instance and define handlers """
+    global socketio # Allow modification of the global variable
+    socketio = sio_instance
+    logger = current_app.logger if current_app else print
+    logger("INFO: Mecanum Control SocketIO initialized and handlers are being defined.")
+
+    # --- DEFINE SocketIO Event Handlers INSIDE this function ---
+    @socketio.on('connect', namespace=NAMESPACE)
+    def handle_mecanum_connect():
+        # request needs to be imported from flask if used here
+        from flask import request
+        logger = current_app.logger if current_app else print
+        logger(f'INFO: Client {request.sid} connected to Mecanum namespace')
+        load_config() # Ensure latest config when client connects
+        emit('mecanum_config', {'config': config})
+        emit('mecanum_serial_status', {'status': get_serial_status(), 'port': config.get("serial_port")})
+
+    @socketio.on('disconnect', namespace=NAMESPACE)
+    def handle_mecanum_disconnect():
+        from flask import request
+        logger = current_app.logger if current_app else print
+        logger(f'INFO: Client {request.sid} disconnected from Mecanum namespace')
+
+    @socketio.on('mecanum_connect_serial', namespace=NAMESPACE)
+    def handle_connect_serial_request():
+        from flask import request
+        logger = current_app.logger if current_app else print
+        logger(f"INFO: Client {request.sid} requested serial connect.")
+        init_serial() # Attempt connection
+
+    @socketio.on('mecanum_disconnect_serial', namespace=NAMESPACE)
+    def handle_disconnect_serial_request():
+        from flask import request
+        logger = current_app.logger if current_app else print
+        logger(f"INFO: Client {request.sid} requested serial disconnect.")
+        close_serial() # Close connection
+
+    @socketio.on('mecanum_control_command', namespace=NAMESPACE)
+    def handle_control_command(data):
+        logger = current_app.logger if current_app else print
+        # 'emit' is imported at top level and should be available via the socketio instance
+        if not ser or not ser.is_open:
+            emit('mecanum_error', {'message': 'Serial port not connected. Cannot send command.'})
+            return
+
+        action = data.get('action')
+        vx = data.get('vx', 0)
+        vy = data.get('vy', 0)
+        omega = data.get('omega', 0)
+        logical_speeds = {}
+
+        try:
+            if action == 'stop': logical_speeds = get_move_speeds(0, 0, 0)
+            elif action == 'move': logical_speeds = get_move_speeds(vx, vy, omega)
+            else:
+                logger(f"WARNING: Mecanum controller: Invalid action received: {action}")
+                return
+
+            physical_speeds = calculate_motor_speeds(logical_speeds)
+            command_str = ",".join(map(str, physical_speeds))
+
+            if not send_serial_command(command_str):
+                 emit('mecanum_error', {'message': 'Failed to send command. Serial disconnected?'})
+
+        except Exception as e:
+            logger(f"ERROR: Mecanum controller: Error processing control command: {e}")
+            emit('mecanum_error', {'message': f'Error processing command: {e}'})
+
+# --- Blueprint Loading Hook ---
+# This runs when the blueprint is registered, *before* init_socketio is called
+# So logger might not be fully configured here yet. Use print for safety.
 @mecanum_control_bp.record_once
 def on_load(state):
-    # Load config when blueprint is registered
+    print("INFO: Loading Mecanum controller configuration during blueprint registration.")
     load_config()
-    # Optionally try initial serial connection? Better to do it on page load/user action.
-    # init_serial()
-
-# Called when a client connects to this namespace
-@socketio.on('connect', namespace=NAMESPACE)
-def handle_mecanum_connect():
-    current_app.logger.info(f'Client {request.sid} connected to Mecanum namespace')
-    # Send current config and status on connect
-    load_config() # Ensure latest config
-    emit('mecanum_config', {'config': config})
-    emit('mecanum_serial_status', {'status': get_serial_status(), 'port': config.get("serial_port")})
-
-@socketio.on('disconnect', namespace=NAMESPACE)
-def handle_mecanum_disconnect():
-    current_app.logger.info(f'Client {request.sid} disconnected from Mecanum namespace')
-    # Optional: If this is the *last* client, maybe stop the robot/close serial?
-    # Be careful with this logic if multiple tabs/users are possible.
-    # For simplicity, we won't auto-close serial on disconnect for now.
-
-@socketio.on('mecanum_connect_serial', namespace=NAMESPACE)
-def handle_connect_serial_request():
-    """ Client requests to connect serial """
-    current_app.logger.info(f"Client {request.sid} requested serial connect.")
-    init_serial() # Attempt connection
-    # Status is emitted inside init_serial
-
-@socketio.on('mecanum_disconnect_serial', namespace=NAMESPACE)
-def handle_disconnect_serial_request():
-    """ Client requests to disconnect serial """
-    current_app.logger.info(f"Client {request.sid} requested serial disconnect.")
-    close_serial() # Close connection
-    # Status is emitted inside close_serial
-
-@socketio.on('mecanum_control_command', namespace=NAMESPACE)
-def handle_control_command(data):
-    """ Handles incoming drive commands from the client """
-    if not ser or not ser.is_open:
-        # Try to connect if not connected? Or just emit error?
-        emit('mecanum_error', {'message': 'Serial port not connected. Cannot send command.'})
-        # if not init_serial(): # Try to auto-connect
-        #      return
-        return # Fail if not connected
-
-    action = data.get('action')
-    vx = data.get('vx', 0)
-    vy = data.get('vy', 0)
-    omega = data.get('omega', 0)
-
-    logical_speeds = {}
-
-    try:
-        if action == 'stop':
-            logical_speeds = get_move_speeds(0, 0, 0)
-        elif action == 'move':
-            logical_speeds = get_move_speeds(vx, vy, omega)
-        else: # Simple directional commands (optional, can be removed if only 'move' is used)
-            speed = PWM_MAX
-            if action == 'forward': logical_speeds = get_move_speeds(speed, 0, 0)
-            elif action == 'backward': logical_speeds = get_move_speeds(-speed, 0, 0)
-            # ... add other simple actions if needed ...
-            else:
-                current_app.logger.warning(f"Mecanum controller: Invalid action received: {action}")
-                return # Ignore invalid actions
-
-        physical_speeds = calculate_motor_speeds(logical_speeds)
-        command_str = ",".join(map(str, physical_speeds))
-
-        if not send_serial_command(command_str):
-             # Error sending (likely disconnected), status updated in send_serial_command
-             emit('mecanum_error', {'message': 'Failed to send command. Serial disconnected?'})
-             # Maybe emit disconnect status? close_serial already does this.
-
-    except Exception as e:
-        current_app.logger.error(f"Mecanum controller: Error processing control command: {e}")
-        emit('mecanum_error', {'message': f'Error processing command: {e}'})
