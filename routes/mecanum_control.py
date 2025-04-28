@@ -338,7 +338,7 @@ def get_move_speeds(vx, vy, omega):
 @mecanum_control_bp.route('/mecanum-control')
 def controller_page():
     logger = get_logger()
-    logger("INFO: Accessing Mecanum Control page.")
+    logger.info("Accessing Mecanum Control page.")
     load_config() # Load fresh config on page load
     serial_status = get_serial_status()
     return render_template(
