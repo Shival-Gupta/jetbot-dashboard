@@ -17,7 +17,7 @@ STARTUP_LOG="$REPO_DIR/startup.log"
 SETUP_LOG="$REPO_DIR/setup.log"
 DASHBOARD_URL="http://localhost:6001"
 REPO_BRANCH="master"
-NETWORK_TIMEOUT=30  # 30 seconds for network check
+NETWORK_TIMEOUT=10  # 10 seconds for network check
 
 # Redirect output to log file and console
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -142,6 +142,8 @@ fi
 if [ -f "$SETUP_LOG" ]; then
     if grep -i "error\|failed" "$SETUP_LOG" > /dev/null; then
         print_status "Setup Log" "WARNING" "Errors or failures found in $SETUP_LOG"
+        echo "Setup Log Errors:"
+        grep -i "error\|failed" "$SETUP_LOG" | head -n 5
     else
         print_status "Setup Log" "OK" "No errors in $SETUP_LOG"
     fi
@@ -151,6 +153,8 @@ fi
 if [ -f "$STARTUP_LOG" ]; then
     if grep -i "error\|failed" "$STARTUP_LOG" > /dev/null; then
         print_status "Startup Log" "WARNING" "Errors or failures found in $STARTUP_LOG"
+        echo "Startup Log Errors:"
+        grep -i "error\|failed" "$STARTUP_LOG" | head -n 5
     else
         print_status "Startup Log" "OK" "No errors in $STARTUP_LOG"
     fi
@@ -160,7 +164,11 @@ fi
 
 # Step 9: Summary
 echo "[$(date)] Verification complete. Summary:"
-grep -E "FAILED|WARNING" "$LOG_FILE" || echo "All checks passed!"
+if grep -E "FAILED|WARNING" "$LOG_FILE" | grep -v "Verification complete" | uniq; then
+    echo "Issues detected. Review details above."
+else
+    echo "All checks passed!"
+fi
 
 echo "Logs saved to $LOG_FILE"
 echo "To fix issues, review messages above and consider re-running setup.sh or checking logs."
