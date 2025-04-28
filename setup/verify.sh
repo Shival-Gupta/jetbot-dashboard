@@ -140,7 +140,7 @@ fi
 
 # Step 8: Check logs for errors
 if [ -f "$SETUP_LOG" ]; then
-    if grep -i "error\|failed" "$SETUP_LOG" > /dev/null; then
+    if grep -i -E '\b(error|failed)\b' "$SETUP_LOG" > /dev/null; then
         print_status "Setup Log" "WARNING" "Errors or failures found in $SETUP_LOG"
         echo "Setup Log Errors:"
         grep -i "error\|failed" "$SETUP_LOG" | head -n 5
