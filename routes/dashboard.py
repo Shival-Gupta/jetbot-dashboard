@@ -66,6 +66,28 @@ def get_service_status():
         return jsonify({'status': 'success', 'service_status': status})
     except subprocess.CalledProcessError as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@dashboard_bp.route('/update', methods=['POST'])
+def update():
+    """Perform git pull to update the repository."""
+    try:
+        output = subprocess.check_output(['git', 'pull'], text=True)
+        print(output)  # Optional: log output
+        return redirect(url_for('dashboard.index'))
+    except Exception as e:
+        return f"Update failed: {str(e)}", 500
+
+def get_git_versions():
+    """Fetch current and latest git commit hashes."""
+    try:
+        current_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+        # Fetch latest info from origin (optional if already fetched)
+        subprocess.run(['git', 'fetch'], check=True)
+        latest_commit = subprocess.check_output(['git', 'rev-parse', 'origin/master'], text=True).strip()
+    except Exception as e:
+        current_commit = latest_commit = f"Error: {str(e)}"
+    return current_commit, latest_commit
+
 # endregion
 
 # region Main Dashboard Route
@@ -75,6 +97,7 @@ def index():
     # Get system hostname and uptime
     hostname = socket.gethostname()
     uptime = helpers.get_system_uptime()
+    current_version, latest_version = get_git_versions()
 
     # Collect analytics data from helpers module
     analytics = {
@@ -118,8 +141,22 @@ def index():
                 <div class="flex items-center space-x-4 mt-4 sm:mt-0">
                     <span class="text-sm">
                         Hostname: <span class="font-semibold">{{ hostname }}</span> |
-                        Uptime: <span class="font-semibold">{{ uptime }}</span>
+                        Uptime: <span class="font-semibold">{{ uptime }}</span> |
+                        Current: <span class="font-semibold">{{ current_version[:7] }}</span> |
+                        Latest: <span class="font-semibold">{{ latest_version[:7] }}</span>
                     </span>
+                    {% if current_version != latest_version %}
+                    <div class="mt-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div class="font-semibold">Update Available!</div>
+                            <form method="POST" action="{{ url_for('dashboard.update') }}">
+                                <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
+                                    Update Now
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
                     <button id="theme-toggle" 
                             class="py-1 px-3 bg-gray-300 rounded hover:bg-gray-400 
                                    dark:bg-gray-600 dark:hover:bg-gray-500 transition">
@@ -328,5 +365,10 @@ def index():
     </body>
     </html>
     """
-    return render_template_string(template, hostname=hostname, uptime=uptime, analytics=analytics)
+    return render_template_string(template,
+                                hostname=hostname,
+                                uptime=uptime,
+                                analytics=analytics,
+                                current_version=current_version,
+                                latest_version=latest_version)
 # endregion
