@@ -139,24 +139,28 @@ def index():
                     </div>
                 </div>
                 <div class="flex items-center space-x-4 mt-4 sm:mt-0">
-                    <span class="text-sm">
-                        Hostname: <span class="font-semibold">{{ hostname }}</span> |
-                        Uptime: <span class="font-semibold">{{ uptime }}</span> |
-                        Current: <span class="font-semibold">{{ current_version[:7] }}</span> |
-                        Latest: <span class="font-semibold">{{ latest_version[:7] }}</span>
-                    </span>
-                    {% if current_version != latest_version %}
-                    <div class="mt-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg shadow">
-                        <div class="flex items-center justify-between">
-                            <div class="font-semibold">Update Available!</div>
-                            <form method="POST" action="{{ url_for('dashboard.update') }}">
-                                <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
-                                    Update Now
-                                </button>
-                            </form>
+                    <div class="flex flex-col space-y-2">
+                        <span class="text-sm">
+                            Hostname: <span class="font-semibold">{{ hostname }}</span> |
+                            Uptime: <span class="font-semibold">{{ uptime }}</span> |
+                        </span>
+                        <span class="text-sm">
+                            Current: <span class="font-semibold">{{ current_version[:7] }}</span> |
+                            Latest: <span class="font-semibold">{{ latest_version[:7] }}</span>
+                        </span>
+                        {% if current_version != latest_version %}
+                        <div class="mt-4 p-4 bg-yellow-100 text-yellow-800 rounded-lg shadow">
+                            <div class="flex items-center justify-between">
+                                <div class="font-semibold">Update Available!</div>
+                                <form method="POST" action="{{ url_for('dashboard.update') }}">
+                                    <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
+                                        Update Now
+                                    </button>
+                                </form>
+                            </div>
                         </div>
+                        {% endif %}
                     </div>
-                    {% endif %}
                     <button id="theme-toggle" 
                             class="py-1 px-3 bg-gray-300 rounded hover:bg-gray-400 
                                    dark:bg-gray-600 dark:hover:bg-gray-500 transition">
