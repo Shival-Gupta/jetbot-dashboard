@@ -1,3 +1,5 @@
+# routes/terminal.py
+
 import os
 import pty
 import eventlet
@@ -15,7 +17,6 @@ terminal_bp = Blueprint('terminal', __name__)
 
 @terminal_bp.route('/terminal')
 def terminal():
-    # Inline HTML + JS (Tailwind theme, xterm.js, reconnect, exit handling)
     return render_template_string("""
 <!DOCTYPE html>
 <html lang="en">
@@ -38,24 +39,42 @@ def terminal():
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
   <style>
-    /* Full‐screen terminal area */
-    #term { width:100%; height:100%; }
+    /* Make sure #term fills remaining space */
+    #term { width: 100%; height: 100%; }
   </style>
 </head>
 <body class="bg-white dark:bg-gray-900 flex flex-col h-screen">
   <!-- Header -->
-  <div class="flex-shrink-0 p-4 bg-gray-100 dark:bg-gray-800 flex justify-between items-center">
-    <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Web Shell</h1>
-    <div class="space-x-2">
-      <button id="reconnectBtn" class="hidden px-3 py-1 bg-blue-600 text-white rounded text-sm">Reconnect</button>
-      <button id="themeToggle" class="px-3 py-1 bg-gray-300 dark:bg-gray-600 rounded text-sm">
+  <div class="flex justify-between items-center p-4 bg-gray-100 dark:bg-gray-800 mb-2">
+    <!-- Left: back to dashboard -->
+    <a href="/" class="text-blue-600 hover:text-blue-700">
+      &larr; 🏠︎
+    </a>
+
+    <!-- Center: title -->
+    <h1 class="text-2xl font-bold text-center text-gray-700 dark:text-gray-200 flex-grow">
+      Web Shell
+    </h1>
+
+    <!-- Right: reconnect + theme toggle -->
+    <div class="flex space-x-2 items-center">
+      <button
+        id="reconnectBtn"
+        class="hidden px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+      >
+        Reconnect
+      </button>
+      <button
+        id="themeToggle"
+        class="px-3 py-1 bg-gray-300 dark:bg-gray-600 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500"
+      >
         <span id="themeIcon">🌙</span>
       </button>
     </div>
   </div>
 
   <!-- Terminal viewport -->
-  <div id="term" class="flex-grow"></div>
+  <div id="term" class="flex-1 min-h-0"></div>
 
   <script>
     // ===== Theme Toggle =====
@@ -99,41 +118,52 @@ def terminal():
     """)
 
 class TerminalNamespace(Namespace):
-    def on_connect(self):
-      # Fork a PTY; child will exec bash, parent gets (pid, fd)
-      pid, fd = pty.fork()
-      # Save the fd so on_input() can write into it
-      self.fd = fd
+    def __init__(self, namespace):
+        super().__init__(namespace)
+        # map each client sid → its PTY fd
+        self.clients = {}
 
-      if pid == 0:
-          # In the child process: tell programs what terminal type to use
-          os.environ['TERM'] = 'xterm-256color'
-          # Launch bash as a login shell (loads ~/.bashrc, etc.)
-          os.execv('/bin/bash', ['/bin/bash', '--login'])
-      else:
-          # In the parent process: start reading PTY output for this client
-          eventlet.spawn_n(self._reader, fd, request.sid)
+    def on_connect(self):
+        sid = request.sid
+        # fork a new PTY; child runs bash
+        pid, fd = pty.fork()
+        # save that fd for this client
+        self.clients[sid] = fd
+
+        if pid == 0:
+            # in child: set TERM and start bash
+            os.environ['TERM'] = 'xterm-256color'
+            os.execv('/bin/bash', ['/bin/bash', '--login'])
+        else:
+            # in parent: read PTY output for this client
+            eventlet.spawn_n(self._reader, fd, sid)
 
     def _reader(self, fd, sid):
-        """Read from PTY and emit to the right client."""
         while True:
             try:
                 data = os.read(fd, 1024)
             except OSError:
                 break
             if not data:
-                # EOF => shell closed
                 socketio_instance.emit('exit', namespace='/terminal', room=sid)
                 break
-            socketio_instance.emit('output',
-                                   {'data': data.decode(errors='ignore')},
-                                   namespace='/terminal',
-                                   room=sid)
+            socketio_instance.emit(
+                'output',
+                {'data': data.decode(errors='ignore')},
+                namespace='/terminal',
+                room=sid
+            )
 
     def on_input(self, message):
-        # Write incoming keystrokes to the PTY
-        os.write(self.fd, message['data'].encode())
+        fd = self.clients.get(request.sid)
+        if fd is not None:
+            os.write(fd, message['data'].encode())
 
     def on_disconnect(self):
-        # Nothing special needed beyond letting the PTY thread notice EOF
-        pass
+        sid = request.sid
+        fd = self.clients.pop(sid, None)
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
