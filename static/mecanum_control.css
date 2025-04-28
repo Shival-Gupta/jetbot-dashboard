@@ -1,0 +1,216 @@
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 20px;
+    background-color: #f4f4f4;
+}
+
+h1, h2 {
+    color: #333;
+    text-align: center;
+    margin-bottom: 1em;
+}
+
+h2 {
+    margin-top: 1.5em;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.3em;
+}
+
+fieldset {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 20px;
+    background-color: #fff;
+    border-radius: 5px;
+}
+
+legend {
+    font-weight: bold;
+    padding: 0 10px;
+    color: #555;
+}
+
+#status-area {
+    background-color: #e0e0e0;
+    padding: 10px 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#serial-status-text {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+#message-area {
+    margin-left: 20px;
+    font-style: italic;
+    color: #444;
+}
+
+.config-section, .control-section {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+.config-controls {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.config-controls button {
+    padding: 10px 20px;
+    margin: 0 10px;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    font-size: 1em;
+}
+
+#btn-save-config {
+    background-color: #4CAF50; /* Green */
+    color: white;
+}
+#btn-save-config:hover {
+    background-color: #45a049;
+}
+
+#btn-reset-config, #btn-connect-serial {
+    background-color: #f44336; /* Red */
+    color: white;
+}
+#btn-reset-config:hover, #btn-connect-serial:hover {
+    background-color: #da190b;
+}
+#btn-connect-serial:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.form-group {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-group label {
+    flex-basis: 150px; /* Adjust as needed */
+    text-align: right;
+    font-size: 0.9em;
+}
+
+.form-group select,
+.form-group input[type="number"],
+.form-group input[type="text"] {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Include padding in width */
+}
+
+.controls-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.button-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, auto); /* Added 4th row for rotation */
+    gap: 10px;
+    width: 250px; /* Adjust size as needed */
+    margin: 0 auto; /* Center the grid */
+    user-select: none; /* Prevent text selection on buttons */
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10+ */
+}
+
+
+.control-button {
+    padding: 15px;
+    font-size: 1.5em;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #e7e7e7;
+    transition: background-color 0.1s ease;
+    text-align: center;
+
+    /* Make buttons behave nicely with touch */
+    touch-action: manipulation; /* Prevent default touch actions like scrolling */
+}
+
+.control-button:active {
+    background-color: #d0d0d0;
+}
+
+.control-button.stop-button {
+    background-color: #f44336; /* Red */
+    color: white;
+    font-weight: bold;
+    grid-column: 2; /* Center stop button */
+    grid-row: 2;
+}
+.control-button.stop-button:active {
+    background-color: #c0392b;
+}
+
+.control-button.rotate {
+    font-size: 1.2em;
+}
+
+/* Positioning rotation buttons */
+.button-grid button[data-action="rotate_left"] {
+    grid-row: 4;
+    grid-column: 1;
+}
+.button-grid button[data-action="rotate_right"] {
+    grid-row: 4;
+    grid-column: 3;
+}
+
+
+#gamepad-status {
+    margin-top: 15px;
+    font-style: italic;
+    color: #555;
+}
+
+/* Style disabled options in selects */
+select option:disabled {
+    color: #aaa;
+    background-color: #eee;
+}
+
+/* Add some basic responsiveness */
+@media (max-width: 768px) {
+    .config-grid {
+        grid-template-columns: 1fr; /* Stack config sections */
+    }
+    .form-group label {
+        flex-basis: 120px;
+        text-align: left;
+    }
+    .button-grid {
+        width: 80%;
+        max-width: 300px;
+    }
+     h1 { font-size: 1.5em; }
+     h2 { font-size: 1.2em; }
+}

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mecanum Robot Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='mecanum_control.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.2/socket.io.min.js"></script>
+</head>
+<body>
+    <a href="{{ url_for('dashboard.index') }}" class="back-link">← Back to Dashboard</a>
+    <h1>Mecanum Robot Controller</h1>
+
+    <div id="status-area">
+        <p style="color: orange; font-size: 0.9em; margin-bottom: 5px;">
+            ⚠️ Ensure the Serial Monitor tool is NOT connected to the robot port ({{ config.serial_port }}) when using this page.
+        </p>
+        Serial Status: <span id="serial-status-text">{{ serial_status }}</span>
+        (<span id="serial-port-display">{{ config.serial_port }}</span>)
+        <button id="btn-connect-serial" {% if serial_status == 'Connected' %}disabled{% endif %}>Connect</button>
+        <button id="btn-disconnect-serial" {% if serial_status != 'Connected' %}disabled{% endif %}>Disconnect</button>
+        <span id="message-area"></span>
+    </div>
+
+    <div class="config-section">
+        <h2>Configuration</h2>
+        <div class="config-controls">
+             <button id="btn-save-config">Save Configuration</button>
+             <button id="btn-reset-config">Reset to Defaults</button>
+        </div>
+
+        <div class="config-grid">
+            <fieldset>
+                <legend>Motor Mapping</legend>
+                <p>Assign logical positions to physical motor drivers (MOTOR 1 = Arduino pins 2/3, etc.).</p>
+                 <div class="form-group">
+                    <label for="map-fl">Front Left:</label>
+                    <select id="map-fl" data-logical="front_left">
+                        <option value="none">None</option>
+                        {% for i in range(num_motors) %}
+                        <option value="{{ i }}" {% if config.mapping.front_left == i %}selected{% endif %}>MOTOR {{ i + 1 }}</option>
+                        {% endfor %}
+                    </select>
+                 </div>
+                 <div class="form-group">
+                     <label for="map-fr">Front Right:</label>
+                     <select id="map-fr" data-logical="front_right">
+                        <option value="none">None</option>
+                        {% for i in range(num_motors) %}
+                        <option value="{{ i }}" {% if config.mapping.front_right == i %}selected{% endif %}>MOTOR {{ i + 1 }}</option>
+                        {% endfor %}
+                     </select>
+                 </div>
+                <div class="form-group">
+                    <label for="map-rl">Rear Left:</label>
+                    <select id="map-rl" data-logical="rear_left">
+                        <option value="none">None</option>
+                        {% for i in range(num_motors) %}
+                        <option value="{{ i }}" {% if config.mapping.rear_left == i %}selected{% endif %}>MOTOR {{ i + 1 }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                 <div class="form-group">
+                     <label for="map-rr">Rear Right:</label>
+                     <select id="map-rr" data-logical="rear_right">
+                        <option value="none">None</option>
+                        {% for i in range(num_motors) %}
+                        <option value="{{ i }}" {% if config.mapping.rear_right == i %}selected{% endif %}>MOTOR {{ i + 1 }}</option>
+                        {% endfor %}
+                     </select>
+                 </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Motor Calibration</legend>
+                <p>Adjust multipliers (0.1 to 2.0) if motors have different torque.</p>
+                <div class="form-group">
+                    <label for="cal-fl">Front Left Mult:</label>
+                    <input type="number" id="cal-fl" data-logical="front_left" min="0.1" max="2.0" step="0.05" value="{{ config.calibration.front_left }}">
+                </div>
+                <div class="form-group">
+                    <label for="cal-fr">Front Right Mult:</label>
+                    <input type="number" id="cal-fr" data-logical="front_right" min="0.1" max="2.0" step="0.05" value="{{ config.calibration.front_right }}">
+                </div>
+                <div class="form-group">
+                    <label for="cal-rl">Rear Left Mult:</label>
+                    <input type="number" id="cal-rl" data-logical="rear_left" min="0.1" max="2.0" step="0.05" value="{{ config.calibration.rear_left }}">
+                </div>
+                 <div class="form-group">
+                    <label for="cal-rr">Rear Right Mult:</label>
+                    <input type="number" id="cal-rr" data-logical="rear_right" min="0.1" max="2.0" step="0.05" value="{{ config.calibration.rear_right }}">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Motor Speed Scaling</legend>
+                <p>Map input speed [1-255] to PWM output range, skipping deadzone.</p>
+                <div class="form-group">
+                    <label for="scale-deadzone-min">Min PWM Output (for Speed > 0):</label>
+                    <input type="number" id="scale-deadzone-min" min="0" max="254" step="1" value="{{ config.scaling.deadzone_min }}">
+                </div>
+                <div class="form-group">
+                    <label for="scale-deadzone-max">Max PWM Output (for Speed 255):</label>
+                    <input type="number" id="scale-deadzone-max" min="1" max="255" step="1" value="{{ config.scaling.deadzone_max }}">
+                </div>
+            </fieldset>
+
+             <fieldset>
+                <legend>Advanced Settings</legend>
+                <div class="form-group">
+                    <label for="setting-serial-port">Serial Port:</label>
+                    <input type="text" id="setting-serial-port" value="{{ config.serial_port }}">
+                </div>
+                <div class="form-group">
+                    <label for="setting-baud-rate">Baud Rate:</label>
+                    <input type="number" id="setting-baud-rate" value="{{ config.baud_rate }}">
+                </div>
+            </fieldset>
+        </div>
+    </div>
+
+
+    <div class="control-section">
+        <h2>Manual Control</h2>
+        <p>Click/Tap & Hold buttons, use WASDQE keys, or connect a Gamepad.</p>
+        <div class="controls-container">
+            <div class="button-grid">
+                <button class="control-button" data-action="diag_fl">↖</button>
+                <button class="control-button" data-action="forward">↑</button>
+                <button class="control-button" data-action="diag_fr">↗</button>
+
+                <button class="control-button" data-action="left">←</button>
+                <button class="control-button stop-button" data-action="stop">STOP</button>
+                <button class="control-button" data-action="right">→</button>
+
+                <button class="control-button" data-action="diag_rl">↙</button>
+                <button class="control-button" data-action="backward">↓</button>
+                <button class="control-button" data-action="diag_rr">↘</button>
+
+                <button class="control-button rotate" data-action="rotate_left">↺</button>
+                <div></div> <button class="control-button rotate" data-action="rotate_right">↻</button>
+            </div>
+             <div id="gamepad-status">Gamepad: Not detected</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='mecanum_control.js') }}"></script>
+</body>
+</html>

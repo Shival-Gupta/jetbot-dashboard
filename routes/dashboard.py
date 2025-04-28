@@ -1,3 +1,4 @@
+# routes/dashboard.py
 from flask import Blueprint, render_template_string, jsonify, request, redirect, url_for
 import subprocess
 
@@ -248,6 +249,10 @@ def index():
                     <a href="/terminal"
                     class="py-2 px-4 bg-gray-700 text-white rounded hover:bg-gray-800 transition text-sm font-medium">
                         Web Shell
+                    </a>
+                    <a href="{{ url_for('mecanum_control.controller_page') }}"
+                        class="py-2 px-4 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition text-sm font-medium">
+                        Mecanum Control
                     </a>
                 </div>
             </div>
