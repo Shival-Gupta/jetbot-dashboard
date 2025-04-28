@@ -1,8 +1,6 @@
+// ~/jetbot-dashboard/static/mecanum_control.js
+
 document.addEventListener('DOMContentLoaded', () => {
-    const socket = io('/mecanum', {
-        reconnectionAttempts: 5, // Optional: Limit reconnection attempts
-        timeout: 10000 // Optional: Connection timeout
-    });
     const PWM_MAX = 255; // Should match backend/Arduino
     const GAMEPAD_AXIS_THRESHOLD = 0.15; // Deadzone for gamepad sticks
     const GAMEPAD_POLL_INTERVAL = 100; // Milliseconds
@@ -10,135 +8,183 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const messageArea = document.getElementById('message-area');
     const serialStatusText = document.getElementById('serial-status-text');
+    const serialPortDisplay = document.getElementById('serial-port-display');
     const btnConnectSerial = document.getElementById('btn-connect-serial');
+    const btnDisconnectSerial = document.getElementById('btn-disconnect-serial');
     const btnSaveConfig = document.getElementById('btn-save-config');
     const btnResetConfig = document.getElementById('btn-reset-config');
     const controlButtons = document.querySelectorAll('.control-button');
-    const mappingSelects = document.querySelectorAll('fieldset:nth-of-type(1) select'); // More specific selector
-    const calibrationInputs = document.querySelectorAll('fieldset:nth-of-type(2) input');
-    const scalingInputs = document.querySelectorAll('fieldset:nth-of-type(3) input');
-    const advancedInputs = document.querySelectorAll('fieldset:nth-of-type(4) input');
+    const mappingSelects = document.querySelectorAll('#mecanum-config-form fieldset:nth-of-type(1) select'); // Specific selector
+    const calibrationInputs = document.querySelectorAll('#mecanum-config-form fieldset:nth-of-type(2) input');
+    const scalingInputs = document.querySelectorAll('#mecanum-config-form fieldset:nth-of-type(3) input');
+    const advancedInputs = document.querySelectorAll('#mecanum-config-form fieldset:nth-of-type(4) input');
     const gamepadStatus = document.getElementById('gamepad-status');
+    const warningMessage = document.getElementById('serial-warning'); // Add an ID to the warning <p> tag if you want to hide/show it
 
     // --- State Variables ---
     let keysPressed = {};
     let gamepad = null;
     let gamepadPollIntervalId = null;
-    let lastGamepadCommand = null; // To avoid sending redundant commands
-    let lastKeyboardCommand = null;
+    let lastGamepadCommandKey = null; // Track last sent command via gamepad
+    let lastKeyboardCommandKey = null; // Track last sent command via keyboard
+    let isSerialConnected = false; // Track connection state locally
     let currentConfig = {}; // Store config locally
 
     // --- Utility Functions ---
-    function showMessage(msg, isError = false) {
+    function showMessage(msg, isError = false, duration = 5000) {
+        if (!messageArea) return;
         messageArea.textContent = msg;
-        messageArea.style.color = isError ? 'red' : 'green';
-        // Clear message after a delay
-        setTimeout(() => { messageArea.textContent = ''; }, 5000);
+        messageArea.style.color = isError ? '#f44336' : '#4CAF50'; // Red or Green
+        if (duration > 0) {
+            setTimeout(() => {
+                if (messageArea.textContent === msg) { // Clear only if the message hasn't changed
+                     messageArea.textContent = '';
+                }
+             }, duration);
+        }
     }
 
+    // --- SocketIO Setup ---
+    const socket = io('/mecanum', {
+        reconnectionAttempts: 3, // Try to reconnect a few times
+        timeout: 10000 // Connection timeout
+    });
+
+    // --- API Fetch Helper (Still needed for config GET/POST) ---
     async function fetchApi(url, options = {}) {
         try {
-            const response = await fetch(url, options);
+            // Add cache-busting parameter for GET requests if needed
+            const getUrl = options.method === 'GET' ? `${url}?t=${Date.now()}` : url;
+
+            const response = await fetch(getUrl, options);
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: `HTTP error! status: ${response.status}` }));
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch (e) {
+                    errorData = { message: `HTTP error! Status: ${response.status} ${response.statusText}` };
+                }
                 throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
-            return await response.json();
+             // Handle cases where the response might be empty (e.g., 204 No Content)
+            const contentType = response.headers.get("content-type");
+             if (contentType && contentType.indexOf("application/json") !== -1) {
+                return await response.json();
+             } else {
+                 return await response.text(); // Or handle as needed
+             }
         } catch (error) {
             console.error('API Fetch Error:', error);
-            showMessage(`Error: ${error.message}`, true);
-            // If serial disconnects during operation, update status
-            if (error.message && error.message.toLowerCase().includes("serial")) {
-                 updateSerialStatus("Disconnected");
-            }
-            throw error; // Re-throw for calling function to handle if needed
+            showMessage(`API Error: ${error.message}`, true);
+            throw error; // Re-throw for calling function
         }
     }
 
-     // --- Serial Communication ---
-    async function connectSerial() {
-        try {
-            const data = await fetchApi('/connect_serial', { method: 'POST'});
-            showMessage(data.message, !data.success);
-            if (data.success) {
-                updateSerialStatus("Connected");
-            }
-        } catch (error) {/* Handled by fetchApi */}
-    }
+     // --- SocketIO Event Handlers ---
+    socket.on('connect', () => {
+        console.log('Socket.IO: Connected to /mecanum namespace');
+        showMessage('Socket.IO Connected', false, 2000);
+        // Backend will send initial config/status on connect
+    });
 
-    function updateSerialStatus(status) {
-        serialStatusText.textContent = status;
-        btnConnectSerial.disabled = (status === "Connected");
-    }
+    socket.on('disconnect', (reason) => {
+        console.log('Socket.IO: Disconnected from /mecanum namespace:', reason);
+        showMessage(`Socket.IO Disconnected: ${reason}`, true, 0); // Keep disconnect message visible
+        updateSerialStatusUI('Disconnected', config?.serial_port || 'N/A'); // Update UI
+        isSerialConnected = false;
+        enableDisableControls(false); // Disable controls on disconnect
+    });
 
-    // --- Configuration Handling ---
-    async function saveConfig() {
-        const configData = readConfigFromUI();
-        try {
-            const data = await fetchApi('/save_config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(configData)
-            });
-            showMessage(data.message, !data.success);
-            if (data.success) {
-                 // Optionally reload config from server to ensure consistency
-                //  loadConfig();
-            }
-        } catch (error) { /* Handled by fetchApi */ }
-    }
+    socket.on('connect_error', (err) => {
+        console.error('Socket.IO: Connection error:', err);
+        showMessage(`Socket.IO Connection Error: ${err.message}`, true, 0); // Keep error visible
+        updateSerialStatusUI('Error', config?.serial_port || 'N/A', `Socket.IO Error: ${err.message}`);
+        isSerialConnected = false;
+        enableDisableControls(false);
+    });
 
-    async function resetConfig() {
-        if (!confirm("Are you sure you want to reset all settings to default?")) {
-            return;
+    socket.on('mecanum_serial_status', (data) => {
+        console.log('Socket.IO: Received mecanum_serial_status:', data);
+        updateSerialStatusUI(data.status, data.port, data.message);
+        isSerialConnected = (data.status === 'Connected');
+        enableDisableControls(isSerialConnected);
+        if (data.status === 'Connected' && data.message) {
+             showMessage(`Serial: ${data.message}`, false, 10000);
+        } else if (data.status === 'Error' && data.message) {
+             showMessage(`Serial Error: ${data.message}`, true, 0);
+        } else if (data.message) {
+             showMessage(`Serial Info: ${data.message}`, false);
         }
-        try {
-            const data = await fetchApi('/reset_config', { method: 'POST' });
-            showMessage(data.message, !data.success);
-            if (data.success && data.config) {
-                updateUIFromConfig(data.config);
-                updateMappingDropdownStates(); // Update dropdowns based on new config
-            }
-        } catch (error) { /* Handled by fetchApi */ }
+    });
+
+    socket.on('mecanum_config', (data) => {
+         console.log('Socket.IO: Received mecanum_config:', data.config);
+         if(data.config) {
+             currentConfig = data.config; // Store locally
+             updateUIFromConfig(data.config);
+         }
+     });
+
+     socket.on('mecanum_error', (data) => {
+          console.error('Socket.IO: Received mecanum_error:', data.message);
+          showMessage(`Backend Error: ${data.message}`, true);
+      });
+
+    // --- UI Update Functions ---
+    function updateSerialStatusUI(status, port, message = '') {
+         if (serialStatusText) serialStatusText.textContent = status;
+         if (serialPortDisplay && port) serialPortDisplay.textContent = port;
+         if (btnConnectSerial) btnConnectSerial.disabled = (status === 'Connected');
+         if (btnDisconnectSerial) btnDisconnectSerial.disabled = (status !== 'Connected');
+
+         // Update warning visibility based on status? (Optional)
+         // if (warningMessage) warningMessage.style.display = (status === 'Connected') ? 'none' : 'block';
     }
 
-     async function loadConfig() {
-        try {
-            const data = await fetchApi('/get_config');
-            if (data.config) {
-                currentConfig = data.config; // Store locally
-                updateUIFromConfig(data.config);
-                updateMappingDropdownStates();
-                updateSerialStatus(data.serial_status || "Unknown");
-                console.log("Config loaded:", currentConfig);
+    function enableDisableControls(isEnabled) {
+         controlButtons.forEach(btn => {
+            if (btn.dataset.action === 'stop') {
+                btn.disabled = false; // Always enable STOP button
+            } else {
+                btn.disabled = !isEnabled;
             }
-        } catch (error) { /* Handled by fetchApi */ }
+         });
+         // You could also disable config saving while disconnected if desired
+         // if (btnSaveConfig) btnSaveConfig.disabled = !isEnabled;
     }
-
 
     function readConfigFromUI() {
         const config = {
             mapping: {},
             calibration: {},
             scaling: {},
-            serial_port: document.getElementById('setting-serial-port').value,
-            baud_rate: parseInt(document.getElementById('setting-baud-rate').value) || 9600
+            // Read values from the Advanced Settings inputs
+            serial_port: document.getElementById('setting-serial-port')?.value || default_serial_port,
+            baud_rate: parseInt(document.getElementById('setting-baud-rate')?.value) || default_baud_rate
         };
 
         mappingSelects.forEach(select => {
             const logicalName = select.dataset.logical;
-            const selectedValue = select.value;
-            // Store 'None' as null, otherwise parse as integer
-            config.mapping[logicalName] = (selectedValue === 'none') ? null : parseInt(selectedValue);
+            if (logicalName) {
+                const selectedValue = select.value;
+                config.mapping[logicalName] = (selectedValue === 'none') ? null : selectedValue; // Store as string '0', '1' etc. or null
+            }
         });
 
         calibrationInputs.forEach(input => {
-            config.calibration[input.dataset.logical] = parseFloat(input.value) || 1.0;
+             const logicalName = input.dataset.logical;
+            if (logicalName) {
+                config.calibration[logicalName] = parseFloat(input.value) || 1.0;
+            }
         });
 
-        config.scaling.deadzone_min = parseInt(document.getElementById('scale-deadzone-min').value) || 0;
-        config.scaling.deadzone_max = parseInt(document.getElementById('scale-deadzone-max').value) || PWM_MAX;
+        config.scaling.deadzone_min = parseInt(document.getElementById('scale-deadzone-min')?.value) || 0;
+        config.scaling.deadzone_max = parseInt(document.getElementById('scale-deadzone-max')?.value) || PWM_MAX;
 
+        // Clamp values to reasonable ranges if necessary
+        config.scaling.deadzone_min = Math.max(0, Math.min(config.scaling.deadzone_min, PWM_MAX -1));
+        config.scaling.deadzone_max = Math.max(config.scaling.deadzone_min + 1, Math.min(config.scaling.deadzone_max, PWM_MAX));
+        config.baud_rate = Math.max(300, config.baud_rate); // Basic sanity check
 
         return config;
     }
@@ -146,38 +192,45 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateUIFromConfig(config) {
         currentConfig = config; // Update local store
 
-        // Serial/Advanced
-        document.getElementById('setting-serial-port').value = config.serial_port || '';
-        document.getElementById('setting-baud-rate').value = config.baud_rate || '';
+        // Advanced Settings
+        const serialPortInput = document.getElementById('setting-serial-port');
+        const baudRateInput = document.getElementById('setting-baud-rate');
+        if(serialPortInput) serialPortInput.value = config.serial_port || '';
+        if(baudRateInput) baudRateInput.value = config.baud_rate || '';
 
         // Mapping
         mappingSelects.forEach(select => {
             const logicalName = select.dataset.logical;
-            const physicalIndex = config.mapping[logicalName];
-            select.value = (physicalIndex === null || physicalIndex === undefined) ? 'none' : physicalIndex;
+            if (logicalName) {
+                const physicalIndexStr = config.mapping[logicalName]; // Might be null, '0', '1', etc.
+                select.value = (physicalIndexStr === null || physicalIndexStr === undefined) ? 'none' : String(physicalIndexStr);
+            }
         });
 
         // Calibration
         calibrationInputs.forEach(input => {
             const logicalName = input.dataset.logical;
-            input.value = config.calibration[logicalName] || 1.0;
+            if (logicalName) {
+                 input.value = config.calibration[logicalName] || 1.0;
+            }
         });
 
         // Scaling
-        document.getElementById('scale-deadzone-min').value = config.scaling.deadzone_min || 0;
-        document.getElementById('scale-deadzone-max').value = config.scaling.deadzone_max || PWM_MAX;
+        const scaleMinInput = document.getElementById('scale-deadzone-min');
+        const scaleMaxInput = document.getElementById('scale-deadzone-max');
+        if(scaleMinInput) scaleMinInput.value = config.scaling.deadzone_min ?? 0;
+        if(scaleMaxInput) scaleMaxInput.value = config.scaling.deadzone_max ?? PWM_MAX;
 
-        // Update mapping dropdown enable/disable states
-        updateMappingDropdownStates();
+        updateMappingDropdownStates(); // Update dropdown enable/disable states
     }
 
     // --- Motor Mapping Logic ---
     function updateMappingDropdownStates() {
         const selectedValues = new Set();
-        // First pass: record selected values (excluding 'none')
+        // First pass: record selected physical motor indices (excluding 'none')
         mappingSelects.forEach(select => {
             if (select.value !== 'none') {
-                selectedValues.add(select.value);
+                selectedValues.add(select.value); // Values are '0', '1', '2', '3' as strings
             }
         });
 
@@ -186,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentSelectedValue = currentSelect.value;
             const options = currentSelect.querySelectorAll('option');
             options.forEach(option => {
+                // Skip the 'none' option
                 if (option.value !== 'none') {
                      // Disable if selected in *another* dropdown, enable otherwise
                     option.disabled = selectedValues.has(option.value) && option.value !== currentSelectedValue;
@@ -194,258 +248,236 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Configuration Actions ---
+    async function saveConfig() {
+        const configData = readConfigFromUI();
+        console.log("Saving config:", configData);
+        try {
+            // Use the specific route for this blueprint
+            const data = await fetchApi('/mecanum-control/save_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(configData)
+            });
+            showMessage(data.message || 'Configuration saved successfully.', !data.success);
+            if (data.success) {
+                 // Optionally reload config from server ONLY IF NEEDED, rely on socket emit mostly
+                 // loadConfig();
+            }
+        } catch (error) { /* Handled by fetchApi */ }
+    }
+
+    async function resetConfig() {
+        if (!confirm("Are you sure you want to reset all Mecanum controller settings to default?")) {
+            return;
+        }
+        try {
+             // Use the specific route for this blueprint
+            const data = await fetchApi('/mecanum-control/reset_config', { method: 'POST' });
+            showMessage(data.message || 'Configuration reset.', !data.success);
+            if (data.success && data.config) {
+                // Update UI immediately with the returned default config
+                updateUIFromConfig(data.config);
+            }
+        } catch (error) { /* Handled by fetchApi */ }
+    }
+
+    async function initialLoadConfig() {
+         try {
+             // Use the specific route for this blueprint
+             const data = await fetchApi('/mecanum-control/get_config', { method: 'GET' });
+             if (data.config) {
+                 currentConfig = data.config; // Store initially
+                 updateUIFromConfig(data.config);
+                 updateSerialStatusUI(data.serial_status || 'Unknown', data.config.serial_port);
+                 console.log("Initial config loaded via fetch:", data.config);
+                 // Enable/disable controls based on initial status
+                 isSerialConnected = (data.serial_status === 'Connected');
+                 enableDisableControls(isSerialConnected);
+             }
+         } catch (error) {
+             console.error("Initial config fetch failed:", error);
+             showMessage("Failed to load initial configuration.", true);
+             enableDisableControls(false); // Disable controls if config fails
+         }
+    }
+
 
     // --- Control Logic ---
-    
-    socket.on('connect', () => {
-        console.log('Connected to Mecanum Socket.IO namespace');
-        showMessage('Socket.IO Connected', false);
-        // Server should send initial status/config now
-    });
-
-    socket.on('disconnect', (reason) => {
-        console.log('Disconnected from Mecanum Socket.IO namespace:', reason);
-        showMessage('Socket.IO Disconnected', true);
-        updateSerialStatusUI('Disconnected', ''); // Update UI on socket disconnect too
-    });
-
-    socket.on('connect_error', (err) => {
-        console.error('Mecanum Socket.IO connection error:', err);
-        showMessage(`Socket.IO Connection Error: ${err.message}`, true);
-        updateSerialStatusUI('Error', '');
-    });
-
-    // Listen for status updates from backend
-    socket.on('mecanum_serial_status', (data) => {
-        console.log('Serial status update:', data);
-        updateSerialStatusUI(data.status, data.port, data.message);
-    });
-
-    // Listen for config updates from backend (e.g., on connect)
-    socket.on('mecanum_config', (data) => {
-        console.log('Received config from server:', data.config);
-        if(data.config) {
-            updateUIFromConfig(data.config); // Reuse your existing UI update function
+    function sendControlCommand(payload) {
+        if (!isSerialConnected && payload.action !== 'stop') {
+            // Don't send movement commands if not connected
+            // console.log("Blocked command send - Serial not connected:", payload);
+            return;
         }
-    });
-
-    // Listen for general errors from backend
-    socket.on('mecanum_error', (data) => {
-        console.error('Mecanum backend error:', data.message);
-        showMessage(data.message, true);
-    });
-
-    // Function to update serial UI elements
-    function updateSerialStatusUI(status, port, message = '') {
-        serialStatusText.textContent = status;
-        if (port) {
-            serialPortDisplay.textContent = port;
+        if (!socket.connected && payload.action !== 'stop') {
+             // Don't send if socket itself is down
+             console.log("Blocked command send - Socket not connected:", payload);
+             return;
         }
-        btnConnectSerial.disabled = (status === 'Connected');
-        btnDisconnectSerial.disabled = (status !== 'Connected');
-        if (message) {
-            showMessage(`Serial Info: ${message}`, status === 'Error');
+
+        // Throttle sending identical commands (especially useful for gamepad/keyboard)
+        const commandKey = JSON.stringify(payload);
+        if (payload.action === 'move') {
+             // For continuous move commands
+            if (gamepad && commandKey === lastGamepadCommandKey) return; // Skip if identical gamepad command
+            if (!gamepad && commandKey === lastKeyboardCommandKey) return; // Skip if identical keyboard command
+
+            lastGamepadCommandKey = gamepad ? commandKey : null;
+            lastKeyboardCommandKey = !gamepad ? commandKey : null;
+        } else if (payload.action === 'stop') {
+             // Allow sending stop, but maybe not hundreds? Check last overall command.
+             if (lastGamepadCommandKey === commandKey || lastKeyboardCommandKey === commandKey) return;
+             // Reset tracking when stop is sent
+             lastGamepadCommandKey = commandKey; // Treat stop as the last command
+             lastKeyboardCommandKey = commandKey;
+        } else {
+             // For button presses (non-move actions) - allow sending press, maybe throttle release?
+             // Reset continuous tracking for discrete button actions
+             lastGamepadCommandKey = null;
+             lastKeyboardCommandKey = null;
         }
-        // You might want to disable control buttons if not connected
-        const controlButtons = document.querySelectorAll('.control-button');
-        controlButtons.forEach(btn => {
-            // btn.disabled = (status !== 'Connected'); // Be careful with STOP button
-            if (btn.dataset.action === 'stop') {
-                btn.disabled = false; // Always enable STOP
-            } else {
-                btn.disabled = (status !== 'Connected');
-            }
-        });
+
+
+        // console.debug("Sending command via SocketIO:", payload); // Reduce console noise
+        socket.emit('mecanum_control_command', payload);
     }
-
-    async function sendControlCommand(payload) {
-        try {
-            // Add a check to avoid sending identical commands rapidly, especially for gamepad/keyboard
-            const commandKey = JSON.stringify(payload);
-            if (payload.action === 'move') {
-                 if (gamepad && commandKey === lastGamepadCommand) return;
-                 if (!gamepad && commandKey === lastKeyboardCommand) return; // Check keyboard only if no gamepad
-                 lastGamepadCommand = gamepad ? commandKey : null;
-                 lastKeyboardCommand = !gamepad ? commandKey : null;
-            } else if (payload.action === 'stop') {
-                 // Allow stop commands more frequently if needed, but prevent spamming
-                 if (lastGamepadCommand === commandKey || lastKeyboardCommand === commandKey) return;
-                 lastGamepadCommand = commandKey;
-                 lastKeyboardCommand = commandKey;
-            } else {
-                 // For button presses, always send start, but maybe limit stop
-                 if (payload.action === 'stop' && (lastGamepadCommand === commandKey || lastKeyboardCommand === commandKey)) return;
-                 lastGamepadCommand = null; // Reset continuous command tracking
-                 lastKeyboardCommand = null;
-            }
-
-            console.debug("Sending command via SocketIO:", payload); // Debug output
-            socket.emit('mecanum_control_command', payload);
-        
-            // await fetchApi('/control', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify(payload)
-            // });
-
-            // Optional: Show confirmation for non-continuous commands
-            // if (payload.action !== 'move') {
-            //     console.log("Sent:", payload);
-            // }
-        } catch (error) {
-            lastGamepadCommand = null; // Reset last command on error
-            lastKeyboardCommand = null;
-            // Error already shown by fetchApi
-        }
-    }
-
-    // Add listeners for the new Connect/Disconnect buttons
-    btnConnectSerial.addEventListener('click', () => {
-        console.log("Requesting serial connect...");
-        socket.emit('mecanum_connect_serial');
-    });
-
-    btnDisconnectSerial.addEventListener('click', () => {
-        console.log("Requesting serial disconnect...");
-        socket.emit('mecanum_disconnect_serial');
-    });
 
     function stopMovement() {
-        sendControlCommand({ action: 'stop' });
+        sendControlCommand({ action: 'stop', vx: 0, vy: 0, omega: 0 }); // Send explicit stop
         keysPressed = {}; // Clear keys when stopping explicitly
-        lastGamepadCommand = null; // Clear last command state
-        lastKeyboardCommand = null;
+        // Reset last command tracking on explicit stop
+        lastGamepadCommandKey = JSON.stringify({ action: 'stop', vx: 0, vy: 0, omega: 0 });
+        lastKeyboardCommandKey = JSON.stringify({ action: 'stop', vx: 0, vy: 0, omega: 0 });
     }
+
 
     // --- Event Listeners ---
 
     // Configuration Buttons
-    btnSaveConfig.addEventListener('click', saveConfig);
-    btnResetConfig.addEventListener('click', resetConfig);
-    btnConnectSerial.addEventListener('click', connectSerial);
+    if (btnSaveConfig) btnSaveConfig.addEventListener('click', saveConfig);
+    if (btnResetConfig) btnResetConfig.addEventListener('click', resetConfig);
+
+    // Serial Connect/Disconnect Buttons
+    if (btnConnectSerial) {
+        btnConnectSerial.addEventListener('click', () => {
+             console.log("Requesting serial connect via SocketIO...");
+             showMessage('Attempting to connect...', false, 0); // Show connecting message
+             socket.emit('mecanum_connect_serial');
+         });
+    }
+     if (btnDisconnectSerial) {
+         btnDisconnectSerial.addEventListener('click', () => {
+              console.log("Requesting serial disconnect via SocketIO...");
+              socket.emit('mecanum_disconnect_serial');
+         });
+     }
+
 
     // Mapping Dropdown Changes
     mappingSelects.forEach(select => {
         select.addEventListener('change', updateMappingDropdownStates);
     });
 
-    // Control Buttons (Touch and Mouse)
+    // Control Buttons (Touch and Mouse) - Add checks for isSerialConnected
     controlButtons.forEach(button => {
         const action = button.dataset.action;
-        let pressTimer = null;
+        let pressTimer = null; // For potential long-press features (unused currently)
 
-        // Mouse events
-        button.addEventListener('mousedown', (e) => {
-             e.preventDefault(); // Prevent text selection, etc.
+        const handlePress = (e) => {
+             e.preventDefault(); // Prevent default actions like text selection/scrolling
+             if (!isSerialConnected && action !== 'stop') return; // Don't process if not connected (except stop)
              if (action === 'stop') {
                  stopMovement(); // Stop is immediate
              } else {
-                 sendControlCommand({ action: action });
+                 sendControlCommand({ action: action }); // Send discrete action name
              }
-        });
-        button.addEventListener('mouseup', (e) => {
+        };
+
+        const handleRelease = (e) => {
             e.preventDefault();
+            // Always send stop on release if it wasn't the stop button itself
             if (action !== 'stop') {
+                 // No need to check isSerialConnected here, stop should always work if possible
                  stopMovement();
              }
-        });
+        };
+
+        // Mouse events
+        button.addEventListener('mousedown', handlePress);
+        button.addEventListener('mouseup', handleRelease);
         button.addEventListener('mouseleave', (e) => {
-             // If mouse button is still down when leaving, treat as mouseup
-             if (e.buttons === 1 && action !== 'stop') { // Check if left mouse button is pressed
-                stopMovement();
+             // If mouse button is still down when leaving, treat as release
+             if (e.buttons === 1 && action !== 'stop') {
+                handleRelease(e);
             }
         });
 
         // Touch events
-        button.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Crucial for stopping double taps, scroll, etc.
-             if (action === 'stop') {
-                 stopMovement();
-             } else {
-                 sendControlCommand({ action: action });
-             }
-        }, { passive: false }); // Need passive: false to call preventDefault
-
-        button.addEventListener('touchend', (e) => {
-            e.preventDefault();
-             if (action !== 'stop') {
-                 stopMovement();
-             }
-        });
-        button.addEventListener('touchcancel', (e) => {
-             e.preventDefault();
-             if (action !== 'stop') {
-                stopMovement();
-            }
-        });
+        button.addEventListener('touchstart', handlePress, { passive: false });
+        button.addEventListener('touchend', handleRelease, { passive: false });
+        button.addEventListener('touchcancel', handleRelease, { passive: false });
     });
 
 
     // Keyboard Controls
     function handleKeyboardControl() {
+        // Do nothing if serial is not connected
+        if (!isSerialConnected) return;
+
         let vx = 0, vy = 0, omega = 0;
-        const speed = PWM_MAX;
+        const speed = PWM_MAX; // Use max speed for simple key presses
 
         if (keysPressed['w']) vx += speed;
         if (keysPressed['s']) vx -= speed;
-        if (keysPressed['a']) vy += speed; // Strafe left
-        if (keysPressed['d']) vy -= speed; // Strafe right
-        if (keysPressed['q']) omega += speed; // Rotate left
-        if (keysPressed['e']) omega -= speed; // Rotate right
+        if (keysPressed['a']) vy += speed; // Strafe left -> Positive Vy
+        if (keysPressed['d']) vy -= speed; // Strafe right -> Negative Vy
+        if (keysPressed['q']) omega += speed; // Rotate left -> Positive Omega
+        if (keysPressed['e']) omega -= speed; // Rotate right -> Negative Omega
 
-        // Normalize if necessary (though mecanum function handles this)
-        // Basic clamping here might be useful if not using get_move_speeds directly
-        // vx = Math.max(-speed, Math.min(speed, vx));
-        // vy = Math.max(-speed, Math.min(speed, vy));
-        // omega = Math.max(-speed, Math.min(speed, omega));
-
+        // Send combined movement command
         if (vx !== 0 || vy !== 0 || omega !== 0) {
             sendControlCommand({ action: 'move', vx: vx, vy: vy, omega: omega });
         } else {
-            // Only send stop if the last command wasn't already stop
-            const stopCommand = JSON.stringify({ action: 'stop' });
-             if (lastKeyboardCommand !== stopCommand && lastGamepadCommand !== stopCommand) {
-                stopMovement();
-            }
+            // Keys released, send stop
+            stopMovement();
         }
     }
 
     document.addEventListener('keydown', (e) => {
-        // Ignore if typing in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
-            return;
-        }
-        // Prevent default browser actions for control keys (scrolling, etc.)
-        if (['w', 'a', 's', 'd', 'q', 'e', ' '].includes(e.key.toLowerCase())) {
-             e.preventDefault();
-        }
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return; // Ignore typing in inputs
+        if (['w', 'a', 's', 'd', 'q', 'e', ' '].includes(e.key.toLowerCase())) e.preventDefault(); // Prevent browser scroll/actions
 
         const key = e.key.toLowerCase();
-        if (!keysPressed[key]) { // Prevent continuous trigger from key repeat
-            keysPressed[key] = true;
-             // Don't trigger movement if gamepad is active (prevents conflicts)
-            if (!gamepad) {
-                 handleKeyboardControl();
+        if (key === ' '){ // Spacebar for immediate stop
+             stopMovement();
+             return;
+        }
+
+        // Only handle movement keys here
+        if (['w', 'a', 's', 'd', 'q', 'e'].includes(key)) {
+            if (!keysPressed[key]) { // Process only on first press, ignore repeats
+                keysPressed[key] = true;
+                 // Don't trigger if gamepad is active (let gamepad take priority)
+                if (!gamepad && isSerialConnected) { // Check connection status
+                     handleKeyboardControl();
+                }
             }
         }
-         // Allow spacebar for immediate stop anytime
-         if (key === ' ') {
-             stopMovement();
-         }
-
     });
 
     document.addEventListener('keyup', (e) => {
-         // Ignore if typing in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
-            return;
-        }
+         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
          const key = e.key.toLowerCase();
-         if (keysPressed[key]) {
-            delete keysPressed[key];
-            // Don't trigger movement if gamepad is active
-            if (!gamepad) {
-                 handleKeyboardControl(); // Recalculate movement based on remaining keys
+         // Handle movement keys release
+         if (['w', 'a', 's', 'd', 'q', 'e'].includes(key)) {
+             if (keysPressed[key]) {
+                delete keysPressed[key];
+                // Don't trigger if gamepad is active
+                if (!gamepad && isSerialConnected) { // Check connection status
+                     handleKeyboardControl(); // Recalculate movement (will send stop if no keys are pressed)
+                }
             }
         }
     });
@@ -453,127 +485,124 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Gamepad Controls ---
     function handleGamepadInput() {
-        if (!gamepad) return;
+        // Do nothing if serial is not connected or gamepad not present
+        if (!isSerialConnected || !gamepad) return;
 
         const axes = gamepad.axes;
         let vx = 0, vy = 0, omega = 0;
 
-        // Left stick for movement (Axis 0: L/R, Axis 1: U/D) - Often inverted Y
-        const leftStickX = axes[0];
-        const leftStickY = -axes[1]; // Invert Y axis for typical forward motion
+        // --- Adjust Axis Indices and Signs based on your specific gamepad ---
+        // Common layout:
+        // Axis 0: Left Stick X (Left/Right) -> maps to vy (Strafe)
+        // Axis 1: Left Stick Y (Up/Down)   -> maps to vx (Forward/Backward) - Often needs inversion (-)
+        // Axis 2: Right Stick X (Left/Right) -> maps to omega (Rotation)
+        // Axis 3: Right Stick Y (Up/Down)   -> unused here
 
+        const leftStickX = axes[0] || 0;
+        const leftStickY = axes[1] || 0;
+        const rightStickX = axes[2] || 0; // Or potentially axes[3] on some gamepads
+
+        // Apply deadzone and scale to PWM range
         if (Math.abs(leftStickY) > GAMEPAD_AXIS_THRESHOLD) {
-            vx = leftStickY * PWM_MAX;
+            vx = -leftStickY * PWM_MAX; // Invert Y axis typically
         }
         if (Math.abs(leftStickX) > GAMEPAD_AXIS_THRESHOLD) {
-            vy = leftStickX * PWM_MAX; // Positive X usually means right, map to negative vy for strafe right
-            //vy = -leftStickX * PWM_MAX; // map to negative vy for strafe right
+            vy = leftStickX * PWM_MAX; // Positive X maps to positive vy (strafe left)
         }
-
-        // Right stick for rotation (Axis 2: L/R or Axis 3, depends on controller)
-        // Common layouts: Axis 2 (X), Axis 3 (Y) OR Axis 3 (X), Axis 4 (Y)
-        let rightStickX = axes[2] ?? axes[3] ?? 0; // Try axis 2 first, then axis 3
-
         if (Math.abs(rightStickX) > GAMEPAD_AXIS_THRESHOLD) {
-            omega = rightStickX * PWM_MAX; // Positive X for rotate right (clockwise, often maps to negative omega)
-            //omega = -rightStickX * PWM_MAX;
+            omega = rightStickX * PWM_MAX; // Positive X maps to positive omega (rotate left)
         }
 
-        // Send move command (includes zero speeds if sticks are centered)
-        sendControlCommand({ action: 'move', vx: Math.round(vx), vy: Math.round(vy), omega: Math.round(omega) });
+        // Send combined 'move' command (includes zeros if sticks are centered)
+        sendControlCommand({
+             action: 'move',
+             vx: Math.round(vx),
+             vy: Math.round(vy),
+             omega: Math.round(omega)
+        });
     }
 
 
     function startGamepadPolling() {
-        if (gamepadPollIntervalId) clearInterval(gamepadPollIntervalId); // Clear existing interval
+        if (gamepadPollIntervalId) clearInterval(gamepadPollIntervalId); // Clear existing interval just in case
 
         gamepadPollIntervalId = setInterval(() => {
-            // Need to re-get the gamepad object each time as the browser might update it
+            // Need to re-get the gamepad object each time
              const freshGamepads = navigator.getGamepads();
+             if (!freshGamepads[gamepad.index]) { // Check if gamepad still exists at index
+                 stopGamepadPolling(); // Stop polling if it disappeared
+                 return;
+             }
              gamepad = freshGamepads[gamepad.index]; // Update reference
 
             if (gamepad && gamepad.connected) {
                 handleGamepadInput();
             } else {
-                // Gamepad disconnected unexpectedly
+                // Gamepad disconnected unexpectedly or polling detected disconnect
                 stopGamepadPolling();
-                gamepadStatus.textContent = 'Gamepad: Disconnected';
-                gamepad = null;
-                // If keyboard was also pressed, it might need a stop command now
-                if (Object.keys(keysPressed).length === 0) {
-                    stopMovement();
-                } else {
-                    handleKeyboardControl(); // Let keyboard take over if keys are pressed
-                }
             }
         }, GAMEPAD_POLL_INTERVAL);
-         gamepadStatus.textContent = `Gamepad: Connected (${gamepad.id})`;
-         // Stop keyboard control explicitly when gamepad connects
-         keysPressed = {};
-         stopMovement(); // Send stop when gamepad connects initially
+
+        if (gamepadStatus) gamepadStatus.textContent = `Gamepad: Connected (${gamepad.id})`;
+        // Stop keyboard control explicitly when gamepad connects if serial is active
+        keysPressed = {};
+        if (isSerialConnected) stopMovement(); // Send stop when gamepad connects initially if robot might be moving
     }
 
     function stopGamepadPolling() {
         if (gamepadPollIntervalId) {
             clearInterval(gamepadPollIntervalId);
             gamepadPollIntervalId = null;
+            console.log("Gamepad polling stopped.");
         }
+        if (gamepadStatus) gamepadStatus.textContent = 'Gamepad: Disconnected';
+        // Send a final stop command if serial was connected when gamepad polling stops
+        if (isSerialConnected) {
+            stopMovement();
+        }
+        gamepad = null;
+        // Optional: Re-enable keyboard if needed? The keyup/keydown handlers will take over if keys are pressed.
     }
 
     window.addEventListener('gamepadconnected', (e) => {
         console.log('Gamepad connected:', e.gamepad);
-        // Only take the first connected gamepad for simplicity
+        // Use the first connected gamepad
         if (!gamepad) {
              gamepad = e.gamepad;
              startGamepadPolling();
-             // Ensure keyboard stops interfering
-             keysPressed = {};
-             stopMovement();
+        } else {
+            console.log("Another gamepad already active.");
         }
     });
 
     window.addEventListener('gamepaddisconnected', (e) => {
         console.log('Gamepad disconnected:', e.gamepad);
         if (gamepad && gamepad.index === e.gamepad.index) {
-            stopGamepadPolling();
-            gamepadStatus.textContent = 'Gamepad: Disconnected';
-            gamepad = null;
-             // Send a final stop command when gamepad disconnects
-             stopMovement();
+            stopGamepadPolling(); // This will also send stop command if needed
         }
     });
 
     // --- Initial Load ---
-    // Initial fetch for config might still be useful for first page load before socket connects fully
-    async function initialLoad() {
-        try {
-            const data = await fetchApi('/mecanum-control/get_config'); // Use fetch for initial load
-            if (data.config) {
-                updateUIFromConfig(data.config);
-                updateSerialStatusUI(data.serial_status || 'Unknown', data.config.serial_port);
-                console.log("Initial config loaded via fetch:", data.config);
-            }
-        } catch (error) {
-            console.error("Initial config fetch failed:", error);
-            showMessage("Failed to load initial configuration.", true);
-        }
-    }
-    initialLoad();
-    // loadConfig(); // Load config from server on page load
-    updateMappingDropdownStates(); // Initial setup for dropdowns
+    initialLoadConfig(); // Fetch initial config via HTTP GET
 
     // Check for existing gamepads on load
-     const initialGamepads = navigator.getGamepads();
-     for (const gp of initialGamepads) {
-         if (gp) {
-             gamepad = gp;
-             startGamepadPolling();
-             break; // Use the first one found
+     try {
+        const initialGamepads = navigator.getGamepads();
+         for (const gp of initialGamepads) {
+             if (gp) {
+                 console.log("Found existing gamepad on load:", gp);
+                 gamepad = gp;
+                 startGamepadPolling();
+                 break; // Use the first one found
+             }
          }
+     } catch(err) {
+         console.error("Error getting initial gamepads:", err);
      }
-     if (!gamepad) {
+     if (!gamepad && gamepadStatus) {
         gamepadStatus.textContent = 'Gamepad: Not detected (Press button)';
      }
+     // Initial control state based on connection status (done in initialLoadConfig)
 
 
 }); // End DOMContentLoaded
