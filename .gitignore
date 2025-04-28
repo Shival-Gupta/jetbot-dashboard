@@ -1,46 +1,163 @@
-# .gitignore
-
-# Python runtime files
+# ------------------------------------------------------------------------------
+# Python build and runtime files
+# ------------------------------------------------------------------------------
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-dist/
-build/
-*.spec
+*.py[cod]
+*$py.class
+*.so
 
-# Virtual environment folders
-venv/
+# C extensions
+cython_debug/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller build artifacts
+*.spec
+*.manifest
+
+# ------------------------------------------------------------------------------
+# Virtual environments
+# ------------------------------------------------------------------------------
+.env
 .venv/
+venv/
 env/
-.env/
 ENV/
 env.bak/
 venv.bak/
+__pypackages__/
 
-# Environment variables file
-.env
-
-# IDE configuration files
-.idea/
+# ------------------------------------------------------------------------------
+# IDEs and editor settings
+# ------------------------------------------------------------------------------
 .vscode/
+.idea/
 *.sublime-project
 *.sublime-workspace
+.spyderproject
+.spyproject
+.ropeproject
 
-# Temporary files
-*.tmp
-*~
+# ------------------------------------------------------------------------------
+# Testing / Coverage reports
+# ------------------------------------------------------------------------------
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
 
-# Log files
+# Type checking
+.mypy_cache/
+.pytype/
+.pyre/
+
+# Ruff linter cache
+.ruff_cache/
+
+# ------------------------------------------------------------------------------
+# Logs and temp files
+# ------------------------------------------------------------------------------
 *.log
 logs/
+*.tmp
+*~
+pip-log.txt
+pip-delete-this-directory.txt
 
-# OS generated files
+# ------------------------------------------------------------------------------
+# Django / Flask / Web stuff
+# ------------------------------------------------------------------------------
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+
+# Scrapy
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# MkDocs documentation
+/site
+
+# ------------------------------------------------------------------------------
+# Jupyter / IPython
+# ------------------------------------------------------------------------------
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# ------------------------------------------------------------------------------
+# Translation files
+# ------------------------------------------------------------------------------
+*.mo
+*.pot
+
+# ------------------------------------------------------------------------------
+# Dependency managers
+# ------------------------------------------------------------------------------
+# Pipenv
+#Pipfile.lock  # Uncomment if you want to ignore Pipfile.lock
+
+# Poetry
+#poetry.lock  # Uncomment if you want to ignore poetry.lock
+
+# PDM
+#pdm.lock  # Uncomment if you want to ignore pdm.lock
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# UV
+#uv.lock  # Uncomment if you want to ignore uv.lock
+
+# ------------------------------------------------------------------------------
+# Configuration files
+# ------------------------------------------------------------------------------
+.pypirc
+
+# ------------------------------------------------------------------------------
+# OS-generated files
+# ------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 
-# Coverage reports
-.coverage
-coverage.xml
-htmlcov/
+# ------------------------------------------------------------------------------
+# Celery
+# ------------------------------------------------------------------------------
+celerybeat-schedule
+celerybeat.pid
+
+# ------------------------------------------------------------------------------
+# SageMath
+# ------------------------------------------------------------------------------
+*.sage.py
