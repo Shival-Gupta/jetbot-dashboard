@@ -7,6 +7,7 @@ import serial
 from flask import (Blueprint, render_template, request, jsonify, current_app, url_for)
 # Import SocketIO components needed at the top level
 from flask_socketio import emit
+import logging
 
 # --- Configuration ---
 CONFIG_FILE = 'mecanum_config.json' # Expect this in the project root
