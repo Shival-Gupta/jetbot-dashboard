@@ -7,7 +7,6 @@ import serial
 from flask import (Blueprint, render_template, request, jsonify, current_app, url_for)
 # Import SocketIO components needed at the top level
 from flask_socketio import emit
-import logging
 
 # --- Configuration ---
 CONFIG_FILE = 'mecanum_config.json' # Expect this in the project root
@@ -35,13 +34,21 @@ NAMESPACE = '/mecanum' # Define a specific namespace for this controller
 
 # --- Logging Helper ---
 # Safely get logger or fallback to print if app context not available
+import logging
+
 def get_logger():
     try:
-        # Try to get logger from current_app context
         return current_app.logger
     except RuntimeError:
-        # Fallback to print if outside app context (e.g., during initial load)
-        return print
+        # Fallback to a default logger
+        logger = logging.getLogger('mecanum_control_fallback')
+        if not logger.handlers:  # Avoid adding handlers multiple times
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+        return logger
 
 # --- Default Configuration ---
 def get_default_config():
