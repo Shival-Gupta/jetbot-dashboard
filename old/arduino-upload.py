@@ -14,7 +14,7 @@ APP_HOST = '0.0.0.0'  # Listen on all network interfaces
 APP_PORT = 6001       # Port for the web server - Changed as requested
 ALLOWED_EXTENSIONS = {'.ino'}
 ARDUINO_CLI_TIMEOUT = 180 # Timeout in seconds
-ARDUINO_CLI_PATH = 'arduino-cli' # Assumes it's in the system PATH
+ARDUINO_CLI_PATH = '/usr/local/bin/arduino-cli' # Assumes it's in the system PATH
 
 # Common FQBNs (Value: User-Friendly Name)
 COMMON_FQBNS = {

@@ -20,7 +20,7 @@ APP_HOST = '0.0.0.0'
 APP_PORT = 6001 # Keep port from previous working version
 ALLOWED_EXTENSIONS = {'.ino'}
 ARDUINO_CLI_TIMEOUT = 180
-ARDUINO_CLI_PATH = 'arduino-cli'
+ARDUINO_CLI_PATH = '/usr/local/bin/arduino-cli'
 SECRET_KEY = os.urandom(24) # Needed for Flask sessions used by SocketIO
 
 # Common FQBNs (Value: User-Friendly Name) - For Uploader

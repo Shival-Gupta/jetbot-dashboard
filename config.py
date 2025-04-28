@@ -27,7 +27,7 @@ if not SECRET_KEY:
 # --- Arduino Uploader Configuration ---
 ALLOWED_EXTENSIONS = {'.ino'}
 ARDUINO_CLI_TIMEOUT = 180
-ARDUINO_CLI_PATH = 'arduino-cli'
+ARDUINO_CLI_PATH = '/usr/local/bin/arduino-cli'
 
 # Common FQBNs (Value: User-Friendly Name)
 COMMON_FQBNS = {
