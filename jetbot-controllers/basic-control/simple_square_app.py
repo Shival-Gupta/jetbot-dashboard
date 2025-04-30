@@ -3,8 +3,10 @@ import time
 import serial
 import serial.tools.list_ports
 from flask import Flask, render_template_string, request, jsonify
+from flask_cors import CORS # Import CORS
 import math
-import threading # Use standard threading
+import threading
+import ssl # Needed for adhoc SSL context checking, though Flask handles it
 
 # --- Configuration ---
 # !!! SET YOUR SERIAL PORT HERE !!!
@@ -20,7 +22,7 @@ FLASK_PORT = 6002 # Using the requested port
 MOVE_SPEED = 150       # Base speed for square sides (0-255)
 MAX_SPEED = 255
 RAMP_STEPS = 4         # Number of steps for ramp-up/down
-RAMP_DELAY = 0.05      # Seconds between ramp steps (total ramp time = RAMP_STEPS * RAMP_DELAY)
+RAMP_DELAY = 0.05      # Seconds between ramp steps
 TIME_PER_UNIT = 0.03   # Seconds of full speed movement per 'unit' - **NEEDS TUNING**
 
 # --- Global Variables ---
@@ -31,7 +33,11 @@ stop_event = threading.Event() # Event to signal the thread to stop
 
 # --- Flask App Setup ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'simple_square_secret!' # Change if needed
+app.config['SECRET_KEY'] = 'simple_square_secret_https!' # Change if needed
+
+# --- Enable CORS for all origins and all routes ---
+CORS(app, resources={r"/*": {"origins": "*"}})
+print("CORS enabled for all origins.")
 
 # --- Serial Communication & Motor Control (Reused & Adapted) ---
 
@@ -54,6 +60,7 @@ def find_arduino_port():
     return None
 
 def connect_serial():
+    # ... (same as before) ...
     """Establishes the serial connection."""
     global ser, SERIAL_PORT
     if ser and ser.is_open:
@@ -94,6 +101,7 @@ def connect_serial():
         return False
 
 def send_command(command):
+    # ... (same as before - uses lock) ...
     """Sends a command string to the Arduino over serial, using a lock."""
     global ser, serial_lock
     if ser is None or not ser.is_open:
@@ -143,50 +151,39 @@ def calculate_mecanum_speeds(vx, vy, omega):
     return [fl, fr, rl, rr]
 
 def _send_motor_speeds(fl, fr, rl, rr):
+    # ... (same as before) ...
     """Helper to format and send motor speeds."""
     cmd = f"{int(fl)},{int(fr)},{int(rl)},{int(rr)}"
     return send_command(cmd)
 
 def _safe_sleep(duration, event):
+    # ... (same as before) ...
     """Sleep for a duration, but wake up early if event is set."""
     start_time = time.monotonic()
     while time.monotonic() - start_time < duration:
         if event.is_set():
             return True # Event was set
-        # Sleep for short intervals to check event frequently
         check_interval = min(0.05, duration - (time.monotonic() - start_time))
         if check_interval > 0:
              time.sleep(check_interval)
-        else: # Avoid potential negative sleep time
+        else:
             break
     return event.is_set()
 
 # --- Square Movement Logic (Background Thread) ---
 
 def run_square_background(units, stop_event_ref):
+    # ... (same as before - includes ramping and stop_event check) ...
     """Function executed in a background thread to move the robot in a square."""
     global square_thread
     print(f"Starting square movement: {units} units")
 
-    # --- Calculations ---
-    # Total time spent ramping up and down for one segment
     total_ramp_time = 2 * RAMP_STEPS * RAMP_DELAY
-    # Time spent moving at full speed for one segment
-    # Ensure minimum move time even if units are small
     full_speed_time = max(0.1, (units * TIME_PER_UNIT))
-    segment_duration = full_speed_time + total_ramp_time # Includes ramp up/down
+    segment_duration = full_speed_time + total_ramp_time
     print(f"Calculated segment duration: {segment_duration:.2f}s (Ramp: {total_ramp_time:.2f}s, Full: {full_speed_time:.2f}s)")
 
-
-    # --- Movement Segments ---
-    # Define segments: [vx_factor, vy_factor, omega_factor]
-    # vx: +fwd/-bwd, vy: +left/-right, omega: +ccw/-cw
-    segments = [
-        [1, 0, 0],  # 1. Move Forward
-        [0, -1, 0], # 2. Strafe Right
-        [-1, 0, 0], # 3. Move Backward
-        [0, 1, 0],  # 4. Strafe Left
-    ]
+    segments = [ [1, 0, 0], [0, -1, 0], [-1, 0, 0], [0, 1, 0] ] # Fwd, Right, Bwd, Left
 
     try:
         for i, factors in enumerate(segments):
@@ -200,139 +197,97 @@ def run_square_background(units, stop_event_ref):
                 if stop_event_ref.is_set(): raise InterruptedError("Stop event set during ramp up")
                 speed_fraction = step / RAMP_STEPS
                 current_speed = MOVE_SPEED * speed_fraction
-                vx = current_speed * vx_f
-                vy = current_speed * vy_f
-                omega = 0 # No rotation during linear moves
+                vx, vy, omega = current_speed * vx_f, current_speed * vy_f, 0
                 speeds = calculate_mecanum_speeds(vx, vy, omega)
-                if not _send_motor_speeds(*speeds):
-                    print("Error sending command during ramp up")
-                    raise ConnectionError("Failed to send serial command")
-                time.sleep(RAMP_DELAY) # Use standard time.sleep, thread doesn't need eventlet sleep
+                if not _send_motor_speeds(*speeds): raise ConnectionError("Failed to send serial command")
+                time.sleep(RAMP_DELAY)
 
             # 2. Move at Full Speed
             print(f"   Moving full speed ({full_speed_time:.2f}s)...")
-            vx = MOVE_SPEED * vx_f
-            vy = MOVE_SPEED * vy_f
-            omega = 0
+            vx, vy, omega = MOVE_SPEED * vx_f, MOVE_SPEED * vy_f, 0
             speeds = calculate_mecanum_speeds(vx, vy, omega)
-            if not _send_motor_speeds(*speeds):
-                 print("Error sending command during full speed move")
-                 raise ConnectionError("Failed to send serial command")
-
-            # Sleep, but check stop_event frequently
-            if _safe_sleep(full_speed_time, stop_event_ref):
-                 raise InterruptedError("Stop event set during full speed move")
-
+            if not _send_motor_speeds(*speeds): raise ConnectionError("Failed to send serial command")
+            if _safe_sleep(full_speed_time, stop_event_ref): raise InterruptedError("Stop event set during full speed move")
 
             # 3. Ramp Down
             print("   Ramping down...")
-            for step in range(RAMP_STEPS - 1, -1, -1): # Go from (steps-1) down to 0
+            for step in range(RAMP_STEPS - 1, -1, -1):
                 if stop_event_ref.is_set(): raise InterruptedError("Stop event set during ramp down")
                 speed_fraction = step / RAMP_STEPS
                 current_speed = MOVE_SPEED * speed_fraction
-                vx = current_speed * vx_f
-                vy = current_speed * vy_f
-                omega = 0
+                vx, vy, omega = current_speed * vx_f, current_speed * vy_f, 0
                 speeds = calculate_mecanum_speeds(vx, vy, omega)
-                if not _send_motor_speeds(*speeds):
-                    print("Error sending command during ramp down")
-                    # Don't raise error here, try to finish stopping
+                _send_motor_speeds(*speeds) # Try to send even if error occurs
                 time.sleep(RAMP_DELAY)
 
-            # Ensure stopped after segment before starting next
             print("   Segment end stop.")
-            if not _send_motor_speeds(0, 0, 0, 0):
-                print("Warning: Failed to send stop command between segments.")
-            time.sleep(0.2) # Short pause between segments
-
+            if not _send_motor_speeds(0, 0, 0, 0): print("Warning: Failed to send stop command between segments.")
+            time.sleep(0.2)
 
         print("Square movement finished normally.")
-
-    except InterruptedError as e:
-        print(f"Square movement interrupted: {e}")
-    except ConnectionError as e:
-         print(f"Square movement failed due to connection error: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred in square thread: {e}")
+    except InterruptedError as e: print(f"Square movement interrupted: {e}")
+    except ConnectionError as e: print(f"Square movement failed due to connection error: {e}")
+    except Exception as e: print(f"An unexpected error occurred in square thread: {e}")
     finally:
-        # Always ensure motors are stopped at the end
         print("Ensuring motors are stopped.")
         _send_motor_speeds(0, 0, 0, 0)
-        time.sleep(0.05) # Give command time to send
+        time.sleep(0.05)
         _send_motor_speeds(0, 0, 0, 0)
-        square_thread = None # Clear the global thread variable
-        stop_event_ref.clear() # Reset event for next time
+        square_thread = None
+        stop_event_ref.clear()
         print("Square thread finished.")
-
 
 # --- Flask Routes ---
 
 @app.route('/')
 def index():
+    # ... (same as before) ...
     """Serves the main HTML control page."""
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/start_square', methods=['POST'])
 def start_square_route():
+    # ... (same as before) ...
     """Starts the square movement in a background thread."""
     global square_thread, stop_event
     if not ser or not ser.is_open:
          return jsonify(success=False, message="Serial port not connected."), 503
-
     if square_thread and square_thread.is_alive():
-        return jsonify(success=False, message="Square movement already in progress."), 409 # Conflict
-
+        return jsonify(success=False, message="Square movement already in progress."), 409
     try:
         data = request.get_json()
-        units = int(data.get('units', 10)) # Default to 10 units if not provided
-        if units <= 0:
-            return jsonify(success=False, message="Units must be a positive number."), 400
+        units = int(data.get('units', 10))
+        if units <= 0: return jsonify(success=False, message="Units must be a positive number."), 400
     except (ValueError, TypeError):
          return jsonify(success=False, message="Invalid units value."), 400
 
-    # Prepare and start the background thread
-    stop_event.clear() # Ensure stop event is reset
+    stop_event.clear()
     square_thread = threading.Thread(target=run_square_background, args=(units, stop_event), daemon=True)
     square_thread.start()
-
     return jsonify(success=True, message=f"Square movement started ({units} units).")
 
 @app.route('/stop', methods=['POST'])
 def stop_route():
+    # ... (same as before - refined stop logic without join) ...
     """Stops any ongoing movement."""
     global square_thread, stop_event
     print(">>> Stop Requested via HTTP <<<")
-
-    # Signal the thread to stop
     stop_event.set()
-
-    # Send immediate stop command via serial
+    print("Sending immediate stop command to Arduino...")
     success = _send_motor_speeds(0, 0, 0, 0)
-    time.sleep(0.05) # Short delay
-    _send_motor_speeds(0, 0, 0, 0) # Send again for reliability
+    time.sleep(0.05)
+    _send_motor_speeds(0, 0, 0, 0)
+    if square_thread:
+         print("Background thread signaled to stop (will exit on next check).")
+    if success: return jsonify(success=True, message="Stop command sent.")
+    else: return jsonify(success=False, message="Stop command sent, but serial write may have failed."), 500
 
-    # Optional: Wait briefly for the thread to finish
-    if square_thread and square_thread.is_alive():
-        print("Waiting for square thread to stop...")
-        square_thread.join(timeout=0.5) # Wait max 0.5 seconds
-        if square_thread.is_alive():
-             print("Warning: Square thread did not stop quickly.")
-        else:
-             print("Square thread stopped.")
-        square_thread = None # Clear reference anyway
-
-    if success:
-        return jsonify(success=True, message="Stop command sent.")
-    else:
-        return jsonify(success=False, message="Stop command sent, but serial write may have failed."), 500
-
-
-# --- HTML Template ---
+# --- HTML Template (No changes needed from previous simple version) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Simple Mecanum Square</title>
+    <title>Simple Mecanum Square (HTTPS)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
@@ -349,7 +304,7 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Mecanum Square Controller</h1>
+    <h1>Mecanum Square Controller (HTTPS)</h1>
 
     <div class="control-group">
         <label for="units">Square Size (units):</label>
@@ -361,7 +316,7 @@ HTML_TEMPLATE = """
         <button id="stop-button" onclick="stopMovement()">Stop Immediately</button>
     </div>
 
-    <div id="status" class="status-info">Enter units and click Start.</div>
+    <div id="status" class="status-info">Enter units and click Start. Connect via HTTPS.</div>
 
     <script>
         const unitsInput = document.getElementById('units');
@@ -371,9 +326,7 @@ HTML_TEMPLATE = """
 
         function setStatus(message, type = 'info') {
             statusDiv.textContent = message;
-            statusDiv.className = `status-${type}`; // status-info, status-success, status-error
-            // Disable/enable buttons based on state could be added here
-            // e.g., disable start when running, disable stop when not running
+            statusDiv.className = `status-${type}`;
         }
 
         async function startSquare() {
@@ -382,78 +335,74 @@ HTML_TEMPLATE = """
                 setStatus('Please enter a valid positive number for units.', 'error');
                 return;
             }
-
             setStatus('Sending start command...', 'info');
-            startButton.disabled = true; // Prevent double clicks
+            startButton.disabled = true;
             stopButton.disabled = false;
-
             try {
-                const response = await fetch('/start_square', {
+                // Fetch requires full URL if interacting cross-origin, but should work fine here
+                const response = await fetch('/start_square', { // Relative path is fine
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ units: unitsValue })
                 });
-
                 const result = await response.json();
-
                 if (response.ok && result.success) {
                     setStatus(`Square movement started (${unitsValue} units). Watch the robot!`, 'success');
-                    // Keep start disabled until finished or stopped
                 } else {
                     setStatus(`Error starting: ${result.message || 'Unknown error'}`, 'error');
                     startButton.disabled = false; // Re-enable on error
                 }
-
             } catch (error) {
                 setStatus(`Network Error starting square: ${error}`, 'error');
-                startButton.disabled = false; // Re-enable on error
+                startButton.disabled = false;
             }
         }
 
         async function stopMovement() {
             setStatus('Sending stop command...', 'info');
-            stopButton.disabled = true; // Disable briefly
-
+            stopButton.disabled = true;
             try {
-                const response = await fetch('/stop', { method: 'POST' });
+                const response = await fetch('/stop', { method: 'POST' }); // Relative path fine
                 const result = await response.json();
-
                 if (response.ok && result.success) {
                     setStatus('Stop command sent. Movement should cease.', 'success');
                 } else {
-                    // Even if server reports failure, UI assumes stopped
                     setStatus(`Stop command sent, but server reported an issue: ${result.message || 'Unknown error'}`, 'error');
                 }
-
             } catch (error) {
                 setStatus(`Network Error stopping movement: ${error}`, 'error');
             } finally {
-                // Always re-enable buttons after stop attempt
                  startButton.disabled = false;
-                 stopButton.disabled = false; // Or keep disabled until confirmed stopped? Simpler to always re-enable.
+                 stopButton.disabled = false;
             }
         }
-
-         // Initial state
          startButton.disabled = false;
-         stopButton.disabled = false; // Stop initially enabled in case robot was moving before start
-
+         stopButton.disabled = false;
     </script>
 </body>
 </html>
 """
 
-
 # --- Main Execution ---
 if __name__ == '__main__':
-    print("--- Simple Mecanum Square Controller ---")
+    print("--- Simple Mecanum Square Controller (HTTPS + CORS) ---")
     if connect_serial():
-        print(f"Flask server starting on http://{FLASK_HOST}:{FLASK_PORT}")
+        print(f"Flask server starting with HTTPS on https://{FLASK_HOST}:{FLASK_PORT}")
+        print("NOTE: Using ad-hoc certificate. Browser will show a security warning.")
         try:
-            # Use Flask's default development server (Werkzeug)
-            # No need for eventlet/socketio here
-            app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False, threaded=True)
-            # threaded=True is important to allow background thread processing
+            # Run with ad-hoc SSL context for HTTPS and enable threading
+            app.run(
+                host=FLASK_HOST,
+                port=FLASK_PORT,
+                debug=False,
+                threaded=True,
+                ssl_context='adhoc' # Use ad-hoc for simplicity
+                # If using generated files: ssl_context=('path/to/cert.pem', 'path/to/key.pem')
+             )
+        except ImportError:
+             print("\nError: 'cryptography' library not found.")
+             print("Please install it for ad-hoc HTTPS: pip install cryptography")
+             print("Alternatively, generate cert.pem and key.pem and use ssl_context=('cert.pem', 'key.pem')")
         except KeyboardInterrupt:
             print("Ctrl+C detected. Stopping motors and shutting down.")
         finally:
@@ -461,7 +410,7 @@ if __name__ == '__main__':
             if ser and ser.is_open:
                  try:
                     print("Sending final stop command...")
-                    stop_event.set() # Signal any running thread
+                    stop_event.set()
                     _send_motor_speeds(0, 0, 0, 0)
                     time.sleep(0.1)
                     _send_motor_speeds(0, 0, 0, 0)
