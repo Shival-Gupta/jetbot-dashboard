@@ -139,8 +139,8 @@ def run_square_background(units, stop_event_ref):
     total_ramp_time = 2 * RAMP_STEPS * RAMP_DELAY
     print(f"Segment duration: {full_speed_time + total_ramp_time:.2f}s")
 
-    segments = [[1, 0, 0], [0, -1, 0], [-1, 0, 0], [0, 1, 0]]  # Fwd, Right, Bwd, Left
-    names = ["Forward", "Strafe Right", "Backward", "Strafe Left"]
+    segments = [[1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]]  # Fwd, Right, Bwd, Left
+    names = ["Forward", "Strafe Left", "Backward", "Strafe Right"]
 
     try:
         for i, (vx_f, vy_f, omega_f) in enumerate(segments):
