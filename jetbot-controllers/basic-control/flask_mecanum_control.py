@@ -1,17 +1,23 @@
+# --- Make sure Eventlet patching happens FIRST ---
+import eventlet
+eventlet.monkey_patch()
+# --- End of Eventlet patching ---
+
+# --- Now import other modules ---
 import time
 import serial
 import serial.tools.list_ports
 from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit
 import math
-import eventlet # Required for async SocketIO
-
-# Required for Flask-SocketIO
-eventlet.monkey_patch()
+# No need to import eventlet again later
 
 # --- Configuration ---
-SERIAL_PORT = '/dev/ttyACM0' # <--- SET YOUR SERIAL PORT HERE
+# Try to auto-detect Arduino port, otherwise set manually
 # SERIAL_PORT = None # Use None to attempt auto-detection
+SERIAL_PORT = '/dev/ttyACM0'  # Set this to the port you found
+# SERIAL_PORT = '/dev/tty.usbmodem14201' # Example for Mac
+# SERIAL_PORT = 'COM3'         # Example for Windows
 
 BAUD_RATE = 9600
 SERIAL_TIMEOUT = 0.1 # seconds (lower timeout might feel more responsive)
