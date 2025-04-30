@@ -18,9 +18,9 @@ FLASK_PORT = 6002
 USE_HTTPS = True  # Toggle to False for HTTP instead of HTTPS
 
 # Movement Parameters (Tune these!)
-MOVE_SPEED = 150       # Base speed (0-255)
+MOVE_SPEED = 250       # Base speed (0-255)
 MAX_SPEED = 255
-RAMP_STEPS = 4         # Steps for ramp-up/down
+RAMP_STEPS = 5         # Steps for ramp-up/down
 RAMP_DELAY = 0.05      # Seconds between ramp steps
 TIME_PER_UNIT = 0.03   # Full speed time per unit
 STOP_REPEATS = 3       # Number of stop commands to send for reliability
